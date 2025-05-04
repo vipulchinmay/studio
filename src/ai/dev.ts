@@ -1,1 +1,2 @@
-// Flows will be imported for their side effects in this file.
+import '@/ai/flows/suggest-files-for-compression.ts';
+import '@/ai/flows/analyze-compression-quality.ts';
