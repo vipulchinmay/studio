@@ -1,3 +1,4 @@
+// src/components/ui/progress.tsx
 "use client"
 
 import * as React from "react"
@@ -19,7 +20,7 @@ const Progress = React.forwardRef<
   >
     {/* Ensure value is clamped between 0 and 100 for styling */}
      <ProgressPrimitive.Indicator
-      className="h-full w-full flex-1 bg-primary transition-transform duration-500 ease-out rounded-full" // Use transition-transform and ease-out, add rounded-full
+      className="h-full w-full flex-1 bg-gradient-to-r from-primary to-blue-500 transition-transform duration-500 ease-out rounded-full" // Use transition-transform, ease-out, add rounded-full, subtle gradient
        style={{ transform: `translateX(-${100 - (value ?? 0)}%)` }} // Use value directly
     />
   </ProgressPrimitive.Root>

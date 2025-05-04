@@ -10,7 +10,7 @@ import { Label } from '@/components/ui/label';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { Progress } from '@/components/ui/progress';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
-import { Upload, File as FileIconLucide, X, CheckCircle, AlertCircle, Image as ImageIcon, FileAudio, Video, Download, Loader2, BrainCircuit, Eye, FileText } from 'lucide-react'; // Added Eye icon, FileText
+import { Upload, File as FileIconLucide, X, CheckCircle, AlertCircle, Image as ImageIcon, FileAudio, Video, Download, Loader2, BrainCircuit, Eye, FileText, FileArchive, Database } from 'lucide-react'; // Added more icons
 import { cn } from '@/lib/utils';
 import { useToast } from '@/hooks/use-toast';
 import { analyzeCompressionQuality, AnalyzeCompressionQualityOutput, AnalyzeCompressionQualityInput } from '@/ai/flows/analyze-compression-quality';
@@ -52,6 +52,7 @@ export const FileCompression = forwardRef<FileCompressionHandle, {}>((props, ref
   const [isDragging, setIsDragging] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const { toast } = useToast();
+  // Rename state to avoid conflict with Image component
   const [previewStates, setPreviewStates] = useState<Record<string, { original?: string, compressed?: string }>>({});
 
 
@@ -129,13 +130,20 @@ export const FileCompression = forwardRef<FileCompressionHandle, {}>((props, ref
    }));
 
 
-  const getFileIcon = (fileType: string) => {
+ const getFileIcon = (fileType: string) => {
+    fileType = fileType?.toLowerCase() || ''; // Handle undefined type
     if (fileType.startsWith('image/')) return <ImageIcon className="h-6 w-6 text-purple-500" />;
     if (fileType.startsWith('audio/')) return <FileAudio className="h-6 w-6 text-blue-500" />;
     if (fileType.startsWith('video/')) return <Video className="h-6 w-6 text-red-500" />;
+    if (fileType.includes('zip') || fileType.includes('archive') || fileType.includes('tar') || fileType.includes('gz')) return <FileArchive className="h-6 w-6 text-orange-500" />;
     if (fileType.includes('pdf')) return <FileText className="h-6 w-6 text-red-600" />;
+    if (fileType.includes('presentation') || fileType.includes('powerpoint')) return <FileText className="h-6 w-6 text-orange-600" />;
+    if (fileType.includes('spreadsheet') || fileType.includes('excel')) return <Database className="h-6 w-6 text-green-600" />;
+    if (fileType.includes('document') || fileType.includes('word')) return <FileText className="h-6 w-6 text-blue-600" />;
+    if (fileType.includes('text') || fileType.includes('log') || fileType.includes('csv')) return <FileText className="h-6 w-6 text-gray-500" />;
     return <FileIconLucide className="h-6 w-6 text-muted-foreground" />;
   };
+
 
   const formatFileSize = (bytes: number): string => {
     if (bytes < 0 || bytes === undefined || bytes === null) return 'N/A';
@@ -360,10 +368,13 @@ export const FileCompression = forwardRef<FileCompressionHandle, {}>((props, ref
 
           // Simulate compressed data - IMPORTANT: For preview, maintain image type
           let compressedBlob: Blob;
+          let compressedType = selectedFile.file.type; // Default to original type
+
           if (selectedFile.file.type.startsWith('image/')) {
               // Simulate image data (could be a simple SVG or text placeholder)
               const svgData = `<svg width="100" height="50" xmlns="http://www.w3.org/2000/svg"><rect width="100%" height="100%" fill="lightgray"/><text x="50%" y="50%" dominant-baseline="middle" text-anchor="middle" font-size="10">Compressed ${selectedFile.file.name}</text></svg>`;
               compressedBlob = new Blob([svgData], { type: 'image/svg+xml' });
+              compressedType = 'image/svg+xml'; // Update type for SVG simulation
               // Adjust size to match calculated compressedSize roughly
               // This is highly approximate for simulation purposes
               const sizeDiffFactor = compressedSize / (svgData.length * 2); // Approx bytes per char
@@ -378,8 +389,12 @@ export const FileCompression = forwardRef<FileCompressionHandle, {}>((props, ref
                    compressedData += `\nSource Path: ${selectedFile.sourcePath}`;
                }
                compressedBlob = new Blob([compressedData], { type: 'text/plain' });
+               compressedType = 'text/plain'; // Update type for text simulation
           }
 
+
+          // Update compressedBlob with the correct type
+          compressedBlob = new Blob([compressedBlob], { type: compressedType });
 
 
           const nameParts = selectedFile.file.name.split('.');
@@ -495,8 +510,8 @@ export const FileCompression = forwardRef<FileCompressionHandle, {}>((props, ref
   return (
     <TooltipProvider delayDuration={100}>
         <Card
-          className={cn("transition-all duration-300 border-dashed border-2 relative overflow-hidden shadow-md hover:shadow-lg",
-            isDragging ? 'border-primary ring-2 ring-primary/50 shadow-lg' : 'border-muted hover:border-primary/30'
+          className={cn("transition-all duration-300 border-dashed border-2 relative overflow-hidden shadow-lg hover:shadow-xl", // Enhanced shadow
+            isDragging ? 'border-primary ring-2 ring-primary/50 scale-[1.01]' : 'border-muted hover:border-primary/30' // Subtle scale on drag
           )}
           onDragOver={handleDragOver}
           onDragLeave={handleDragLeave}
@@ -514,7 +529,7 @@ export const FileCompression = forwardRef<FileCompressionHandle, {}>((props, ref
              </motion.div>
           )}
           <CardHeader>
-            <CardTitle className="flex items-center gap-2">
+            <CardTitle className="flex items-center gap-2 text-xl sm:text-2xl">
                 <Upload className="h-6 w-6 text-primary" />
                  Upload & Optimize
             </CardTitle>
@@ -523,8 +538,8 @@ export const FileCompression = forwardRef<FileCompressionHandle, {}>((props, ref
           <CardContent className="space-y-6">
             <div
                 className={cn(
-                    "flex flex-col items-center justify-center p-10 border-2 border-dashed rounded-lg cursor-pointer transition-all duration-200 relative z-0",
-                    isDragging ? "border-primary bg-transparent scale-105" : "border-border hover:border-primary/50 hover:bg-muted/50",
+                    "flex flex-col items-center justify-center p-10 border-2 border-dashed rounded-lg cursor-pointer transition-all duration-200 relative z-0 bg-muted/20 hover:bg-muted/30", // Subtle background on hover
+                    isDragging ? "border-primary bg-transparent scale-105" : "border-border hover:border-primary/50",
                     "group"
                 )}
                 onClick={() => fileInputRef.current?.click()}
@@ -564,15 +579,15 @@ export const FileCompression = forwardRef<FileCompressionHandle, {}>((props, ref
                         animate="animate"
                         exit="exit"
                         layout
-                        className="flex items-center space-x-3 p-3 bg-card rounded-md shadow-sm hover:bg-muted/80 transition-colors duration-150 relative overflow-hidden border border-transparent hover:border-border"
+                        className="flex items-center space-x-3 p-3 bg-card rounded-md shadow-sm hover:bg-muted/80 transition-colors duration-150 relative overflow-hidden border border-transparent hover:border-border/50" // Subtle hover border
                     >
                        <div className={cn(
                           "absolute left-0 top-0 bottom-0 w-1 rounded-l-md transition-colors duration-300",
-                           item.status === 'pending' && 'bg-yellow-400/50',
-                           item.status === 'analyzing' && 'bg-blue-400/60 animate-pulse',
-                           item.status === 'compressing' && 'bg-primary/70',
-                           item.status === 'complete' && 'bg-green-500/70',
-                           item.status === 'error' && 'bg-destructive/70'
+                           item.status === 'pending' && 'bg-yellow-400/60', // Slightly stronger pending color
+                           item.status === 'analyzing' && 'bg-blue-400/70 animate-pulse',
+                           item.status === 'compressing' && 'bg-primary/80',
+                           item.status === 'complete' && 'bg-green-500/80',
+                           item.status === 'error' && 'bg-destructive/80'
                        )}></div>
                       <div className="flex-shrink-0 pl-2">{getFileIcon(item.file.type)}</div>
                       <div className="flex-1 min-w-0 space-y-1 pl-1">
@@ -607,7 +622,7 @@ export const FileCompression = forwardRef<FileCompressionHandle, {}>((props, ref
                                          className={cn("cursor-help mt-1 font-normal text-[10px] leading-tight py-0.5",
                                              !item.analysis.shouldCompress && item.analysis.recommendedMethod !== 'none' && "text-orange-600 dark:text-orange-500 border-orange-500/50 bg-orange-500/10",
                                              item.analysis.shouldCompress && "text-green-600 dark:text-green-400 border-green-500/50 bg-green-500/10",
-                                              item.analysis.recommendedMethod === 'none' && "opacity-70 bg-muted/50",
+                                              item.analysis.recommendedMethod === 'none' && "opacity-70 bg-muted/60",
                                              (
                                                 (item.analysis.recommendedMethod.startsWith('lossless') && compressionLevel === 'lossless_optimized') ||
                                                 (item.analysis.recommendedMethod === 'lossy_high_quality' && compressionLevel === 'high') ||
@@ -635,49 +650,72 @@ export const FileCompression = forwardRef<FileCompressionHandle, {}>((props, ref
                                  <Tooltip>
                                    <TooltipTrigger asChild>
                                      <DialogTrigger asChild>
-                                       <Button variant="ghost" size="icon" className="h-7 w-7 text-muted-foreground hover:text-primary hover:bg-primary/10" aria-label="Preview Image">
+                                       <Button variant="ghost" size="icon" className="h-7 w-7 text-muted-foreground hover:text-primary hover:bg-primary/10 rounded-full" aria-label="Preview Image">
                                          <Eye className="h-4 w-4" />
                                        </Button>
                                      </DialogTrigger>
                                    </TooltipTrigger>
                                    <TooltipContent><p>Preview Image</p></TooltipContent>
                                  </Tooltip>
-                                 <DialogContent className="max-w-3xl">
+                                 {/* Increase max-width, remove fixed width */}
+                                 <DialogContent className="max-w-4xl w-auto">
                                      <DialogHeader>
                                          <DialogTitle>Image Preview: {item.file.name}</DialogTitle>
                                      </DialogHeader>
-                                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4 items-start">
+                                      <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mt-4 items-start">
                                          {/* Original Preview */}
                                         {previews.original && (
-                                             <div className="space-y-2">
-                                                <h3 className="text-sm font-medium text-center">Original</h3>
-                                                 <div className="border rounded-md overflow-hidden relative aspect-video bg-muted">
-                                                     <Image src={previews.original} alt="Original Preview" layout="fill" objectFit="contain" />
+                                             <div className="space-y-2 flex flex-col items-center">
+                                                <h3 className="text-sm font-semibold text-muted-foreground mb-1">Original</h3>
+                                                 {/* Ensure image fills container but respects aspect ratio */}
+                                                 <div className="border rounded-md overflow-hidden relative w-full max-w-md aspect-[4/3] bg-muted flex items-center justify-center">
+                                                     <Image
+                                                         src={previews.original}
+                                                         alt="Original Preview"
+                                                         fill // Use fill for responsive sizing
+                                                         style={{ objectFit: 'contain' }} // Maintain aspect ratio
+                                                         sizes="(max-width: 768px) 100vw, (max-width: 1200px) 50vw, 33vw" // Add sizes prop
+                                                     />
                                                  </div>
-                                                <p className="text-xs text-muted-foreground text-center">Size: {formatFileSize(item.originalSize)}</p>
+                                                <p className="text-xs text-muted-foreground text-center mt-2">Size: {formatFileSize(item.originalSize)}</p>
                                              </div>
                                          )}
-                                         {/* Compressed Preview */}
+                                         {/* Optimized Preview */}
                                          {previews.compressed && item.status === 'complete' && (
-                                             <div className="space-y-2">
-                                                <h3 className="text-sm font-medium text-center">Optimized ({compressionLevel.replace(/_/g, ' ')})</h3>
-                                                 <div className="border rounded-md overflow-hidden relative aspect-video bg-muted">
-                                                     <Image src={previews.compressed} alt="Compressed Preview" layout="fill" objectFit="contain" />
+                                             <div className="space-y-2 flex flex-col items-center">
+                                                <h3 className="text-sm font-semibold text-muted-foreground mb-1">Optimized ({compressionLevel.replace(/_/g, ' ')})</h3>
+                                                 <div className="border rounded-md overflow-hidden relative w-full max-w-md aspect-[4/3] bg-muted flex items-center justify-center">
+                                                     <Image
+                                                        src={previews.compressed}
+                                                        alt="Compressed Preview"
+                                                        fill
+                                                        style={{ objectFit: 'contain' }}
+                                                        sizes="(max-width: 768px) 100vw, (max-width: 1200px) 50vw, 33vw"
+                                                     />
                                                  </div>
-                                                 <p className="text-xs text-muted-foreground text-center">Size: {formatFileSize(item.compressedSize!)}</p>
+                                                 <p className="text-xs text-muted-foreground text-center mt-2">Size: {formatFileSize(item.compressedSize!)}</p>
                                              </div>
                                           )}
                                           {/* Show placeholder if compressing or not yet compressed */}
-                                          {item.status !== 'complete' && previews.original && (
-                                              <div className="space-y-2 flex flex-col items-center justify-center border rounded-md aspect-video bg-muted/50">
+                                          {(item.status === 'compressing' || item.status === 'analyzing' || (item.status === 'pending' && !item.analysis) || (item.status === 'pending' && item.analysis && !previews.compressed)) && previews.original && (
+                                              <div className="space-y-2 flex flex-col items-center justify-center border rounded-md aspect-[4/3] w-full max-w-md bg-muted/50">
                                                  <Loader2 className="h-8 w-8 animate-spin text-primary mb-2" />
                                                  <p className="text-sm text-muted-foreground">Optimized preview pending...</p>
                                               </div>
                                           )}
+                                           {/* Handle error state for preview */}
+                                            {item.status === 'error' && previews.original && (
+                                                <div className="space-y-2 flex flex-col items-center justify-center border rounded-md aspect-[4/3] w-full max-w-md bg-destructive/10">
+                                                    <AlertCircle className="h-8 w-8 text-destructive mb-2" />
+                                                    <p className="text-sm text-destructive">Optimization failed</p>
+                                                </div>
+                                            )}
                                      </div>
-                                      <DialogClose className="absolute right-4 top-4 rounded-sm opacity-70 ring-offset-background transition-opacity hover:opacity-100 focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 disabled:pointer-events-none data-[state=open]:bg-accent data-[state=open]:text-muted-foreground">
-                                        <X className="h-4 w-4" />
-                                        <span className="sr-only">Close</span>
+                                      <DialogClose asChild>
+                                         <Button variant="ghost" size="icon" className="absolute right-4 top-4 rounded-full opacity-70 hover:opacity-100 hover:bg-muted">
+                                           <X className="h-4 w-4" />
+                                           <span className="sr-only">Close</span>
+                                         </Button>
                                       </DialogClose>
                                  </DialogContent>
                                </Dialog>
@@ -685,7 +723,7 @@ export const FileCompression = forwardRef<FileCompressionHandle, {}>((props, ref
                          {item.status === 'complete' ? (
                               <Tooltip>
                                   <TooltipTrigger asChild>
-                                     <Button variant="outline" size="icon" onClick={() => handleDownload(item)} className="h-8 w-8 text-primary hover:text-primary hover:bg-primary/10" aria-label={`Download ${item.compressedFileName}`}>
+                                     <Button variant="outline" size="icon" onClick={() => handleDownload(item)} className="h-8 w-8 text-primary hover:text-primary hover:bg-primary/10 rounded-full" aria-label={`Download ${item.compressedFileName}`}>
                                        <Download className="h-4 w-4" />
                                      </Button>
                                  </TooltipTrigger>
@@ -694,7 +732,7 @@ export const FileCompression = forwardRef<FileCompressionHandle, {}>((props, ref
                            ) : item.status === 'error' ? (
                               <Tooltip>
                                   <TooltipTrigger asChild>
-                                      <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive hover:bg-destructive/10 cursor-pointer" onClick={() => analyzeFile(item.id, item.file.name, item.originalSize, item.file.type)} aria-label="Retry Analysis">
+                                      <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive hover:bg-destructive/10 cursor-pointer rounded-full" onClick={() => analyzeFile(item.id, item.file.name, item.originalSize, item.file.type)} aria-label="Retry Analysis">
                                           <AlertCircle className="h-5 w-5" />
                                       </Button>
                                   </TooltipTrigger>
@@ -712,7 +750,7 @@ export const FileCompression = forwardRef<FileCompressionHandle, {}>((props, ref
                           {item.status !== 'compressing' && item.status !== 'analyzing' && (
                              <Tooltip>
                                  <TooltipTrigger asChild>
-                                     <Button variant="ghost" size="icon" className="h-7 w-7 text-muted-foreground hover:text-destructive hover:bg-destructive/10" onClick={() => removeFile(item.id)} aria-label="Remove file">
+                                     <Button variant="ghost" size="icon" className="h-7 w-7 text-muted-foreground hover:text-destructive hover:bg-destructive/10 rounded-full" onClick={() => removeFile(item.id)} aria-label="Remove file">
                                          <X className="h-4 w-4" />
                                      </Button>
                                  </TooltipTrigger>
@@ -737,31 +775,32 @@ export const FileCompression = forwardRef<FileCompressionHandle, {}>((props, ref
                 className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3"
                 aria-label="Compression level selection"
               >
-                 <Label htmlFor="lossless_optimized" className={cn("flex flex-col items-start space-y-1 p-4 border rounded-md transition-all duration-200 cursor-pointer hover:border-primary hover:shadow-sm has-[:checked]:border-primary has-[:checked]:ring-1 has-[:checked]:ring-primary has-[:checked]:shadow-md", compressionLevel === 'lossless_optimized' && "bg-primary/5 border-primary")}>
+                 {/* Make Radio Labels more prominent */}
+                 <Label htmlFor="lossless_optimized" className={cn("flex flex-col items-start space-y-1 p-4 border rounded-lg transition-all duration-200 cursor-pointer hover:border-primary hover:shadow-lg has-[:checked]:border-primary has-[:checked]:ring-2 has-[:checked]:ring-primary has-[:checked]:shadow-lg", compressionLevel === 'lossless_optimized' && "bg-primary/5 border-primary")}>
                     <div className="flex items-center justify-between w-full">
-                        <span className="font-medium">Lossless</span>
+                        <span className="font-semibold text-sm">Lossless</span>
                          <RadioGroupItem value="lossless_optimized" id="lossless_optimized" className="mt-0" />
                     </div>
                     <p className="text-xs text-muted-foreground">Best quality via smart optimization. Ideal for text, code, PNGs.</p>
-                     <Badge variant="outline" className="text-green-600 border-green-500/50 text-[10px] mt-1">Recommended</Badge>
+                     <Badge variant="outline" className="text-green-600 border-green-500/50 text-[10px] mt-1 font-medium">Recommended</Badge>
                 </Label>
-                 <Label htmlFor="high" className={cn("flex flex-col items-start space-y-1 p-4 border rounded-md transition-all duration-200 cursor-pointer hover:border-primary hover:shadow-sm has-[:checked]:border-primary has-[:checked]:ring-1 has-[:checked]:ring-primary has-[:checked]:shadow-md", compressionLevel === 'high' && "bg-primary/5 border-primary")}>
+                 <Label htmlFor="high" className={cn("flex flex-col items-start space-y-1 p-4 border rounded-lg transition-all duration-200 cursor-pointer hover:border-primary hover:shadow-lg has-[:checked]:border-primary has-[:checked]:ring-2 has-[:checked]:ring-primary has-[:checked]:shadow-lg", compressionLevel === 'high' && "bg-primary/5 border-primary")}>
                      <div className="flex items-center justify-between w-full">
-                        <span className="font-medium">High Compression</span>
+                        <span className="font-semibold text-sm">High Compression</span>
                          <RadioGroupItem value="high" id="high" className="mt-0" />
                      </div>
                     <p className="text-xs text-muted-foreground">Max size reduction, slight quality loss possible. Good for images/video.</p>
                  </Label>
-                 <Label htmlFor="medium" className={cn("flex flex-col items-start space-y-1 p-4 border rounded-md transition-all duration-200 cursor-pointer hover:border-primary hover:shadow-sm has-[:checked]:border-primary has-[:checked]:ring-1 has-[:checked]:ring-primary has-[:checked]:shadow-md", compressionLevel === 'medium' && "bg-primary/5 border-primary")}>
+                 <Label htmlFor="medium" className={cn("flex flex-col items-start space-y-1 p-4 border rounded-lg transition-all duration-200 cursor-pointer hover:border-primary hover:shadow-lg has-[:checked]:border-primary has-[:checked]:ring-2 has-[:checked]:ring-primary has-[:checked]:shadow-lg", compressionLevel === 'medium' && "bg-primary/5 border-primary")}>
                      <div className="flex items-center justify-between w-full">
-                         <span className="font-medium">Balanced</span>
+                         <span className="font-semibold text-sm">Balanced</span>
                           <RadioGroupItem value="medium" id="medium" className="mt-0" />
                      </div>
                     <p className="text-xs text-muted-foreground">Good balance between size reduction and quality/speed.</p>
                  </Label>
-                  <Label htmlFor="low" className={cn("flex flex-col items-start space-y-1 p-4 border rounded-md transition-all duration-200 cursor-pointer hover:border-primary hover:shadow-sm has-[:checked]:border-primary has-[:checked]:ring-1 has-[:checked]:ring-primary has-[:checked]:shadow-md", compressionLevel === 'low' && "bg-primary/5 border-primary")}>
+                  <Label htmlFor="low" className={cn("flex flex-col items-start space-y-1 p-4 border rounded-lg transition-all duration-200 cursor-pointer hover:border-primary hover:shadow-lg has-[:checked]:border-primary has-[:checked]:ring-2 has-[:checked]:ring-primary has-[:checked]:shadow-lg", compressionLevel === 'low' && "bg-primary/5 border-primary")}>
                      <div className="flex items-center justify-between w-full">
-                         <span className="font-medium">Fastest</span>
+                         <span className="font-semibold text-sm">Fastest</span>
                          <RadioGroupItem value="low" id="low" className="mt-0" />
                      </div>
                     <p className="text-xs text-muted-foreground">Quickest compression, less size reduction. Minimal quality impact.</p>
@@ -775,7 +814,9 @@ export const FileCompression = forwardRef<FileCompressionHandle, {}>((props, ref
                 size="lg"
                 onClick={handleCompression}
                 disabled={isProcessingAny || selectedFiles.every(f => f.status !== 'pending' && f.status !== 'error') || selectedFiles.length === 0}
-                className="w-full transition-all duration-300 ease-in-out transform hover:scale-[1.01] active:scale-[0.99] disabled:hover:scale-100 shadow-sm hover:shadow-md"
+                className={cn("w-full transition-all duration-300 ease-in-out transform hover:scale-[1.01] active:scale-[0.99] disabled:hover:scale-100 shadow-md hover:shadow-lg", // Enhance button shadow
+                   isProcessingAny ? "bg-gradient-to-r from-primary/80 to-primary/60" : "bg-gradient-to-r from-primary to-blue-500" // Subtle gradient on button
+                )}
                 aria-live="polite"
             >
                 {isProcessingAny ? (
