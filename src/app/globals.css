@@ -2,12 +2,6 @@
 @tailwind components;
 @tailwind utilities;
 
-body {
-  font-family: var(--font-geist-sans), system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, 'Open Sans', 'Helvetica Neue', sans-serif; /* Added system fonts */
-  /* Slightly softer background */
-  @apply bg-background text-foreground; /* Use background directly */
-}
-
 @layer base {
   :root {
     --background: 0 0% 100%; /* Clean white */
@@ -28,7 +22,7 @@ body {
     --destructive-foreground: 0 0% 98%;
     --border: 215 20% 90%; /* Softer border */
     --input: 215 20% 90%; /* Softer input border */
-    --ring: 217 91% 60%; /* Brighter Blue for focus rings */
+    --ring: 217 91% 55%; /* Slightly deeper blue for focus rings */
     --chart-1: 12 76% 61%;
     --chart-2: 173 58% 39%;
     --chart-3: 197 37% 24%;
@@ -48,25 +42,25 @@ body {
   }
 
   .dark {
-    --background: 224 71% 10%; /* Dark Blue */
+    --background: 224 71% 4%; /* Darker Blue */
     --foreground: 210 20% 98%; /* Almost White */
-    --card: 224 71% 14%; /* Slightly lighter dark blue */
+    --card: 224 71% 6%; /* Slightly darker card */
     --card-foreground: 210 20% 98%;
-    --popover: 224 71% 10%;
+    --popover: 224 71% 4%; /* Match dark background */
     --popover-foreground: 210 20% 98%;
     --primary: 217 91% 65%; /* Lighter Blue */
     --primary-foreground: 224 71% 10%; /* Dark Blue text */
-    --secondary: 215 28% 17%; /* Dark Grayish Blue */
+    --secondary: 215 28% 12%; /* Darker Grayish Blue */
     --secondary-foreground: 210 20% 98%;
-    --muted: 215 28% 17%; /* Same as secondary */
+    --muted: 215 28% 12%; /* Same as secondary */
     --muted-foreground: 215 15% 65%; /* Lighter Muted Gray */
     --accent: 173 80% 36%; /* Brighter Teal */
     --accent-foreground: 0 0% 98%; /* White text */
     --destructive: 0 72% 51%; /* Slightly brighter red */
     --destructive-foreground: 0 0% 98%;
-    --border: 215 28% 20%; /* Slightly lighter border */
-    --input: 215 28% 20%; /* Slightly lighter input border */
-    --ring: 217 91% 65%; /* Lighter Blue for focus rings */
+    --border: 215 28% 17%; /* Darker border */
+    --input: 215 28% 17%; /* Darker input border */
+    --ring: 217 91% 60%; /* Slightly less bright blue ring */
     --chart-1: 220 70% 50%;
     --chart-2: 160 60% 45%;
     --chart-3: 30 80% 55%;
@@ -74,20 +68,29 @@ body {
     --chart-5: 340 75% 55%;
 
     /* Sidebar specific vars - update for dark mode consistency */
-    --sidebar-background: 224 71% 10%; /* Match background */
+    --sidebar-background: 224 71% 4%; /* Match background */
     --sidebar-foreground: 210 20% 98%;
     --sidebar-primary: 217 91% 65%;
     --sidebar-primary-foreground: 224 71% 10%;
-    --sidebar-accent: 215 28% 17%; /* Match secondary/muted */
+    --sidebar-accent: 215 28% 12%; /* Match secondary/muted */
     --sidebar-accent-foreground: 210 20% 98%;
-    --sidebar-border: 215 28% 20%; /* Match border */
-    --sidebar-ring: 217 91% 65%;
+    --sidebar-border: 215 28% 17%; /* Match border */
+    --sidebar-ring: 217 91% 60%;
   }
 }
 
 @layer base {
   * {
-    @apply border-border; /* Apply border color to all elements by default */
+    @apply border-border transition-colors duration-150; /* Apply border color & base transition */
   }
-  /* Body styles are applied via @apply above */
+  body {
+    font-family: var(--font-geist-sans), system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, 'Open Sans', 'Helvetica Neue', sans-serif;
+    @apply bg-gradient-to-br from-background to-muted/30 text-foreground antialiased; /* Subtle gradient */
+    min-height: 100vh;
+  }
+
+   /* Improve focus rings globally */
+   *:focus-visible {
+    @apply outline-none ring-2 ring-ring ring-offset-2 ring-offset-background;
+  }
 }

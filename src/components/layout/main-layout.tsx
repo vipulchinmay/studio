@@ -1,5 +1,5 @@
 import type { ReactNode } from 'react';
-import { FileArchive, LogIn, LogOut, UserCircle, Cloud } from 'lucide-react';
+import { FileArchive, LogIn, LogOut, UserCircle, Cloud, Settings, LifeBuoy } from 'lucide-react'; // Added icons
 import { Button } from '@/components/ui/button';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import {
@@ -9,9 +9,11 @@ import {
   DropdownMenuLabel,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
+  DropdownMenuGroup
 } from '@/components/ui/dropdown-menu';
 import GoogleIcon from '@/components/icons/google-icon'; // Assuming you create this
 import AppleIcon from '@/components/icons/apple-icon'; // Assuming you create this
+import { cn } from '@/lib/utils';
 
 interface MainLayoutProps {
   children: ReactNode;
@@ -24,23 +26,23 @@ interface MainLayoutProps {
 
 export function MainLayout({ children, isLoggedIn, onLogin, onLogout, userName, userImage }: MainLayoutProps) {
   return (
-    <div className="flex min-h-screen flex-col bg-muted/20 dark:bg-background">
-      <header className="sticky top-0 z-40 w-full border-b bg-background shadow-sm">
-        <div className="container flex h-16 items-center justify-between space-x-4">
-          <div className="flex items-center gap-2">
+    <div className="flex min-h-screen flex-col bg-gradient-to-br from-background via-background to-muted/30 dark:bg-gradient-to-br dark:from-background dark:via-background dark:to-secondary/10"> {/* Subtle gradient */}
+      <header className="sticky top-0 z-40 w-full border-b bg-background/80 backdrop-blur-lg shadow-sm"> {/* Semi-transparent header */}
+        <div className="container flex h-16 items-center justify-between space-x-4 px-4 sm:px-6 lg:px-8"> {/* Responsive padding */}
+          <div className="flex items-center gap-2 transition-opacity hover:opacity-80"> {/* Hover effect */}
              <FileArchive className="h-6 w-6 text-primary" />
             <span className="text-lg font-bold tracking-tight text-foreground">
               FileWise
             </span>
           </div>
-           <div className="flex items-center gap-4">
+           <div className="flex items-center gap-3 sm:gap-4"> {/* Adjusted gap */}
             {isLoggedIn ? (
                 <DropdownMenu>
                   <DropdownMenuTrigger asChild>
-                    <Button variant="ghost" className="relative h-8 w-8 rounded-full">
-                      <Avatar className="h-8 w-8">
+                    <Button variant="ghost" className="relative h-9 w-9 rounded-full transition-transform hover:scale-105 active:scale-95"> {/* Hover/Active scale */}
+                      <Avatar className="h-9 w-9 border-2 border-transparent group-hover:border-primary/50 transition-all"> {/* Added border */}
                         <AvatarImage src={userImage} alt={userName || 'User'} />
-                        <AvatarFallback>{userName ? userName.charAt(0).toUpperCase() : <UserCircle />}</AvatarFallback>
+                        <AvatarFallback className="bg-muted text-muted-foreground">{userName ? userName.charAt(0).toUpperCase() : <UserCircle />}</AvatarFallback>
                       </Avatar>
                     </Button>
                   </DropdownMenuTrigger>
@@ -48,11 +50,22 @@ export function MainLayout({ children, isLoggedIn, onLogin, onLogout, userName, 
                     <DropdownMenuLabel className="font-normal">
                       <div className="flex flex-col space-y-1">
                         <p className="text-sm font-medium leading-none">{userName || 'User'}</p>
-                        {/* You can add email here if available */}
+                        {/* <p className="text-xs leading-none text-muted-foreground">demo@example.com</p> */}
                       </div>
                     </DropdownMenuLabel>
                     <DropdownMenuSeparator />
-                    <DropdownMenuItem onClick={onLogout} className="cursor-pointer">
+                     <DropdownMenuGroup>
+                         <DropdownMenuItem className="cursor-pointer">
+                            <Settings className="mr-2 h-4 w-4" />
+                            <span>Settings</span>
+                         </DropdownMenuItem>
+                          <DropdownMenuItem className="cursor-pointer">
+                             <LifeBuoy className="mr-2 h-4 w-4" />
+                             <span>Support</span>
+                         </DropdownMenuItem>
+                     </DropdownMenuGroup>
+                    <DropdownMenuSeparator />
+                    <DropdownMenuItem onClick={onLogout} className="cursor-pointer text-destructive focus:text-destructive focus:bg-destructive/10">
                       <LogOut className="mr-2 h-4 w-4" />
                       <span>Log out</span>
                     </DropdownMenuItem>
@@ -61,7 +74,7 @@ export function MainLayout({ children, isLoggedIn, onLogin, onLogout, userName, 
               ) : (
                  <DropdownMenu>
                     <DropdownMenuTrigger asChild>
-                      <Button variant="outline">
+                      <Button variant="outline" className="transition-transform hover:scale-105 active:scale-95"> {/* Hover/Active scale */}
                         <LogIn className="mr-2 h-4 w-4" /> Login
                       </Button>
                     </DropdownMenuTrigger>
@@ -80,7 +93,7 @@ export function MainLayout({ children, isLoggedIn, onLogin, onLogout, userName, 
                  </DropdownMenu>
             )}
              {isLoggedIn && (
-                <Button variant="outline" size="sm">
+                <Button variant="outline" size="sm" className="transition-transform hover:scale-105 active:scale-95 hidden sm:inline-flex"> {/* Hide on small screens */}
                   <Cloud className="mr-2 h-4 w-4" /> Connect Cloud
                 </Button>
               )}
@@ -88,18 +101,23 @@ export function MainLayout({ children, isLoggedIn, onLogin, onLogout, userName, 
         </div>
       </header>
       <main className="flex-1">
-        <div className="container py-8">
+        {/* Added max-width and centered content */}
+        <div className="container max-w-5xl mx-auto py-8 sm:py-12 px-4 sm:px-6 lg:px-8">
           {children}
         </div>
       </main>
-      <footer className="py-6 md:px-8 md:py-0 border-t bg-background">
-        <div className="container flex flex-col items-center justify-center gap-4 md:h-24 md:flex-row">
+      <footer className="mt-16 py-6 md:px-8 md:py-8 border-t bg-background/50"> {/* Added margin-top and more padding */}
+        <div className="container max-w-5xl mx-auto flex flex-col items-center justify-center gap-4 md:h-auto md:flex-row md:justify-between"> {/* Adjusted height and added justify-between */}
           <p className="text-center text-sm leading-loose text-muted-foreground md:text-left">
             © {new Date().getFullYear()} FileWise. All rights reserved.
           </p>
+           {/* Add some footer links if desired */}
+           <div className="flex gap-4 text-sm text-muted-foreground">
+               {/* <a href="#" className="hover:text-foreground transition-colors">Privacy Policy</a>
+               <a href="#" className="hover:text-foreground transition-colors">Terms of Service</a> */}
+           </div>
         </div>
       </footer>
     </div>
   );
 }
-

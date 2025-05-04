@@ -89,11 +89,23 @@ export default {
   				to: {
   					height: '0'
   				}
-  			}
+  			},
+              // Custom fade-in animation
+             'fade-in': {
+                 from: { opacity: '0' },
+                 to: { opacity: '1' },
+             },
+              // Subtle slide-up and fade-in
+             'slide-up-fade': {
+                 from: { opacity: '0', transform: 'translateY(4px)' },
+                 to: { opacity: '1', transform: 'translateY(0)' },
+             }
   		},
   		animation: {
   			'accordion-down': 'accordion-down 0.2s ease-out',
-  			'accordion-up': 'accordion-up 0.2s ease-out'
+  			'accordion-up': 'accordion-up 0.2s ease-out',
+              'fade-in': 'fade-in 0.3s ease-out forwards', // Added forwards to keep state
+              'slide-up-fade': 'slide-up-fade 0.3s ease-out forwards',
   		}
   	}
   },

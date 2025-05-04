@@ -13,6 +13,8 @@ import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Loader2, RefreshCcw, AlertCircle } from 'lucide-react'; // Added AlertCircle
 import { useToast } from '@/hooks/use-toast';
 import { Button } from '@/components/ui/button'; // Added Button import
+import { motion } from 'framer-motion'; // Import motion for animations
+import { cn } from '@/lib/utils';
 
 // Define the type for the ref handle exposed by FileCompression
 export interface FileCompressionHandle {
@@ -51,7 +53,7 @@ export default function Home() {
       setUserImage(provider === 'google' ? 'https://picsum.photos/seed/g-user/40/40' : 'https://picsum.photos/seed/a-user/40/40');
       toast({ title: "Login Successful", description: `Welcome, ${name}!` });
       fetchSuggestions(); // Fetch suggestions immediately after login
-  }, [toast]); // Removed userName dependency from here
+  }, [toast]); // Removed fetchSuggestions from here, called explicitly
 
   const handleLogout = useCallback(() => {
     console.log('Simulating logout...');
@@ -106,9 +108,9 @@ export default function Home() {
        setSuggestions([]); // Clear suggestions on error
     } finally {
       // Check login status again before setting loading state
-      if (isLoggedIn) {
-          setIsLoadingSuggestions(false);
-      }
+       // Ensure loading is always false eventually, even if logged out during fetch
+       setIsLoadingSuggestions(false);
+
     }
   }, [isLoggedIn, toast]); // Depend on isLoggedIn and toast
 
@@ -172,6 +174,11 @@ export default function Home() {
 
   }, [suggestions, toast]);
 
+   // Animation variants
+   const sectionVariants = {
+     hidden: { opacity: 0, y: 20 },
+     visible: { opacity: 1, y: 0, transition: { duration: 0.5, ease: "easeOut" } },
+   };
 
   return (
     <MainLayout
@@ -181,9 +188,14 @@ export default function Home() {
         userName={userName}
         userImage={userImage}
     >
-      <div className="space-y-8 md:space-y-12"> {/* Increased spacing */}
+      <div className="space-y-10 md:space-y-16"> {/* Increased spacing */}
         {/* File Compression Section (Local Files) */}
-        <section className="space-y-4 p-4 sm:p-6 bg-card rounded-lg shadow border border-border/50"> {/* Added subtle border */}
+        <motion.section
+            initial="hidden"
+            animate="visible"
+            variants={sectionVariants}
+            className="space-y-4 p-4 sm:p-6 bg-card rounded-lg shadow-lg border border-border/60" // Slightly stronger shadow and border
+        >
           <h1 className="text-xl sm:text-2xl font-semibold tracking-tight text-card-foreground">Local File Compression</h1>
           <p className="text-sm sm:text-base text-muted-foreground">
             Select files from your device. They'll be analyzed for the best compression options.
@@ -191,12 +203,18 @@ export default function Home() {
            {/* Forward the ref to the FileCompression component */}
            {/* Note: FileCompression needs to use forwardRef and useImperativeHandle */}
           <FileCompression ref={fileCompressionRef} />
-        </section>
+        </motion.section>
 
-        <Separator />
+        <Separator className="my-8 md:my-12"/> {/* Consistent spacing with section gap */}
 
          {/* Compression Suggestions Section (Cloud Files) */}
-        <section className="space-y-4 p-4 sm:p-6 bg-card rounded-lg shadow border border-border/50"> {/* Added subtle border */}
+        <motion.section
+            initial="hidden"
+            animate="visible"
+            variants={sectionVariants}
+            transition={{ delay: 0.2 }} // Stagger animation slightly
+            className="space-y-4 p-4 sm:p-6 bg-card rounded-lg shadow-lg border border-border/60" // Slightly stronger shadow and border
+        >
           <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
             <div className="flex-1">
                 <h2 className="text-xl sm:text-2xl font-semibold tracking-tight text-card-foreground">Cloud File Suggestions</h2>
@@ -225,7 +243,7 @@ export default function Home() {
 
            {/* Error Display */}
            {error && !isLoadingSuggestions && isLoggedIn && ( // Show error only if logged in and not loading
-            <Alert variant="destructive" className="mt-4">
+            <Alert variant="destructive" className="mt-4 animate-fade-in">
                  <AlertCircle className="h-4 w-4"/>
               <AlertTitle>Error Loading Suggestions</AlertTitle>
               <AlertDescription>{error}</AlertDescription>
@@ -234,20 +252,32 @@ export default function Home() {
 
            {/* Loading State */}
           {isLoadingSuggestions ? (
-            <div className="flex flex-col items-center justify-center py-16 text-center border border-dashed rounded-lg mt-4">
+            <motion.div
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+                className="flex flex-col items-center justify-center py-16 text-center border border-dashed rounded-lg mt-4 bg-muted/20"
+            >
               <Loader2 className="h-12 w-12 animate-spin text-primary mb-4" />
               <p className="text-lg font-medium text-foreground">Loading Cloud Suggestions</p>
-              <p className="text-muted-foreground">Analyzing your cloud files. This might take a moment.</p>
-            </div>
+              <p className="text-muted-foreground">Analyzing your cloud files...</p>
+            </motion.div>
           ) : (
-            // Suggestions Component
-            <CompressionSuggestions
-                suggestions={suggestions}
-                onCompressRequest={handleAddCloudFileToLocalQueue} // Pass the correct handler
-                isLoggedIn={isLoggedIn}
-                // Pass cloud compression handler if implemented:
-                // onCompressCloudFile={handleCompressCloudFile}
-            />
+            // Suggestions Component - Wrap with motion.div for smooth appearance
+             <motion.div
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                transition={{ delay: 0.1 }} // Slight delay after loading finishes
+                className={cn(suggestions.length > 0 || !isLoggedIn ? "mt-4" : "")} // Add margin only if there's content or login prompt
+              >
+                 <CompressionSuggestions
+                     suggestions={suggestions}
+                     onCompressRequest={handleAddCloudFileToLocalQueue} // Pass the correct handler
+                     isLoggedIn={isLoggedIn}
+                     // Pass cloud compression handler if implemented:
+                     // onCompressCloudFile={handleCompressCloudFile}
+                 />
+             </motion.div>
           )}
         </section>
       </div>
@@ -255,28 +285,6 @@ export default function Home() {
   );
 }
 
-
-// Wrap FileCompression with forwardRef to receive the ref
-const ForwardedFileCompression = forwardRef<FileCompressionHandle, {}>( (props, ref) => {
-   // Expose the addFileToLocalQueue function via useImperativeHandle
-  // This requires the actual FileCompression component to be modified
-  // to accept a ref and define this handle.
-
-  // Placeholder implementation - the real one needs to be inside FileCompression.tsx
-   useImperativeHandle(ref, () => ({
-     addFileToLocalQueue: (file, sourceInfo) => {
-       console.log("Placeholder: addFileToLocalQueue called in FileCompression wrapper", file.name, sourceInfo);
-       // The actual implementation inside FileCompression.tsx would update its internal state
-       // e.g., call its internal addFiles function or similar
-     }
-   }));
-
-   // Render the actual component (this is just illustrative)
-   // In reality, you'd likely pass the ref down to the component itself
-   // if FileCompression itself is wrapped in forwardRef
-   // For now, assume FileCompression.tsx is modified to handle the ref internally.
-   return <FileCompression /* {...props} - Pass props if needed */ />;
- });
 
 // It's often cleaner to do the forwardRef directly in the component file (FileCompression.tsx)
 // If FileCompression.tsx is updated like:
@@ -287,3 +295,4 @@ const ForwardedFileCompression = forwardRef<FileCompressionHandle, {}>( (props, 
 // If FileCompression.tsx IS NOT modified, this wrapper becomes necessary,
 // but the `useImperativeHandle` needs access to FileCompression's internal state/functions,
 // which makes placing it inside FileCompression.tsx the better approach.
+// The current setup assumes FileCompression.tsx *has been modified* to accept and handle the ref.
