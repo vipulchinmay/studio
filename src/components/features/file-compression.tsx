@@ -3,19 +3,21 @@
 
 import { useState, useRef, useCallback, useEffect, forwardRef, useImperativeHandle } from 'react';
 import type { ForwardedRef } from 'react'; // Import ForwardedRef type if needed, usually inferred
+import Image from 'next/image'; // Import next/image
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { Progress } from '@/components/ui/progress';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
-import { Upload, File as FileIconLucide, X, CheckCircle, AlertCircle, Image as ImageIcon, FileAudio, Video, Download, Loader2, BrainCircuit } from 'lucide-react';
+import { Upload, File as FileIconLucide, X, CheckCircle, AlertCircle, Image as ImageIcon, FileAudio, Video, Download, Loader2, BrainCircuit, Eye, FileText } from 'lucide-react'; // Added Eye icon, FileText
 import { cn } from '@/lib/utils';
 import { useToast } from '@/hooks/use-toast';
 import { analyzeCompressionQuality, AnalyzeCompressionQualityOutput, AnalyzeCompressionQualityInput } from '@/ai/flows/analyze-compression-quality';
 import { Badge } from '@/components/ui/badge';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { motion, AnimatePresence } from 'framer-motion';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogClose } from '@/components/ui/dialog'; // Import Dialog components
 
 type CompressionLevel = 'lossless_optimized' | 'high' | 'medium' | 'low';
 type FileStatus = 'pending' | 'uploading' | 'analyzing' | 'compressing' | 'complete' | 'error';
@@ -33,6 +35,8 @@ interface SelectedFile {
   analysis?: AnalyzeCompressionQualityOutput | null;
   source?: 'local' | 'cloud';
   sourcePath?: string;
+  previewUrl?: string; // Added for image preview
+  compressedPreviewUrl?: string; // Added for compressed preview
 }
 
 // Define the handle type that will be exposed via the ref
@@ -48,11 +52,58 @@ export const FileCompression = forwardRef<FileCompressionHandle, {}>((props, ref
   const [isDragging, setIsDragging] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const { toast } = useToast();
+  const [previewStates, setPreviewStates] = useState<Record<string, { original?: string, compressed?: string }>>({});
+
+
+   // Effect to create and revoke preview URLs
+   useEffect(() => {
+    const currentPreviewUrls: Record<string, { original?: string, compressed?: string }> = {};
+
+    selectedFiles.forEach(item => {
+        let originalUrl: string | undefined = undefined;
+        let compressedUrl: string | undefined = undefined;
+
+        // Create URL for original file if it's an image
+        if (item.file.type.startsWith('image/')) {
+            originalUrl = URL.createObjectURL(item.file);
+        }
+
+        // Create URL for compressed blob if it exists and is an image
+        // Assuming compressed blob maintains image type or we can check the name/type
+        if (item.compressedBlob && (item.file.type.startsWith('image/') || item.compressedBlob.type.startsWith('image/'))) {
+            compressedUrl = URL.createObjectURL(item.compressedBlob);
+        }
+
+        if (originalUrl || compressedUrl) {
+            currentPreviewUrls[item.id] = { original: originalUrl, compressed: compressedUrl };
+        }
+    });
+
+    setPreviewStates(currentPreviewUrls);
+
+    // Cleanup function to revoke URLs when component unmounts or files change
+    return () => {
+      Object.values(currentPreviewUrls).forEach(urls => {
+        if (urls.original) URL.revokeObjectURL(urls.original);
+        if (urls.compressed) URL.revokeObjectURL(urls.compressed);
+      });
+    };
+  }, [selectedFiles]); // Re-run when selectedFiles change
+
 
    // Expose the addFileToLocalQueue function via useImperativeHandle
    useImperativeHandle(ref, () => ({
      addFileToLocalQueue: (file, sourceInfo) => {
        console.log("FileCompression: addFileToLocalQueue called via ref", file.name, sourceInfo);
+        let previewUrl: string | undefined = undefined;
+        if (file.type.startsWith('image/')) {
+          try {
+            previewUrl = URL.createObjectURL(file); // Create preview URL immediately
+          } catch (e) {
+            console.error("Error creating object URL for cloud file:", e);
+          }
+        }
+
        const newFile: SelectedFile = {
          id: `${file.name}-${sourceInfo?.originalSize ?? file.size}-${Date.now()}`,
          file: file,
@@ -61,6 +112,7 @@ export const FileCompression = forwardRef<FileCompressionHandle, {}>((props, ref
          originalSize: sourceInfo?.originalSize ?? file.size,
          source: 'cloud',
          sourcePath: sourceInfo?.path,
+         previewUrl: previewUrl, // Store the initial preview URL
        };
        // Ensure adding to state updates it correctly
         setSelectedFiles(prev => {
@@ -78,9 +130,10 @@ export const FileCompression = forwardRef<FileCompressionHandle, {}>((props, ref
 
 
   const getFileIcon = (fileType: string) => {
-    if (fileType.startsWith('image/')) return <ImageIcon className="h-6 w-6 text-muted-foreground" />;
-    if (fileType.startsWith('audio/')) return <FileAudio className="h-6 w-6 text-muted-foreground" />;
-    if (fileType.startsWith('video/')) return <Video className="h-6 w-6 text-muted-foreground" />;
+    if (fileType.startsWith('image/')) return <ImageIcon className="h-6 w-6 text-purple-500" />;
+    if (fileType.startsWith('audio/')) return <FileAudio className="h-6 w-6 text-blue-500" />;
+    if (fileType.startsWith('video/')) return <Video className="h-6 w-6 text-red-500" />;
+    if (fileType.includes('pdf')) return <FileText className="h-6 w-6 text-red-600" />;
     return <FileIconLucide className="h-6 w-6 text-muted-foreground" />;
   };
 
@@ -105,14 +158,25 @@ export const FileCompression = forwardRef<FileCompressionHandle, {}>((props, ref
 
 
   const addFiles = (files: File[]) => {
-     const newFiles: SelectedFile[] = files.map(file => ({
-      id: `${file.name}-${file.size}-${Date.now()}`,
-      file,
-      status: 'pending',
-      progress: 0,
-      originalSize: file.size,
-      source: 'local',
-    }));
+     const newFiles: SelectedFile[] = files.map(file => {
+        let previewUrl: string | undefined = undefined;
+        if (file.type.startsWith('image/')) {
+            try {
+                previewUrl = URL.createObjectURL(file);
+            } catch (e) {
+                console.error("Error creating object URL:", e);
+            }
+        }
+        return {
+          id: `${file.name}-${file.size}-${Date.now()}`,
+          file,
+          status: 'pending',
+          progress: 0,
+          originalSize: file.size,
+          source: 'local',
+          previewUrl: previewUrl, // Store the preview URL
+        };
+     });
 
     setSelectedFiles(prev => [...prev, ...newFiles]);
     newFiles.forEach(nf => analyzeFile(nf.id, nf.file.name, nf.file.size, nf.file.type));
@@ -124,8 +188,15 @@ export const FileCompression = forwardRef<FileCompressionHandle, {}>((props, ref
     );
 
      // Find the correct file *from the current state* inside the callback closure
-    const targetFile = selectedFiles.find(f => f.id === fileId);
-    const simulatedFilePath = targetFile?.sourcePath || `/local/${fileName}`;
+    // Use a function update for setSelectedFiles if direct state access is problematic
+    let simulatedFilePath = `/local/${fileName}`;
+    setSelectedFiles(prev => {
+        const targetFile = prev.find(f => f.id === fileId);
+        if (targetFile?.sourcePath) {
+            simulatedFilePath = targetFile.sourcePath;
+        }
+        return prev; // No state change here, just getting the path
+    })
 
 
     const analysisInput: AnalyzeCompressionQualityInput = {
@@ -214,11 +285,12 @@ export const FileCompression = forwardRef<FileCompressionHandle, {}>((props, ref
       });
     }
  // eslint-disable-next-line react-hooks/exhaustive-deps
- }, [toast]); // Remove selectedFiles from dependencies if causing stale closure issues
+ }, [toast]); // Keep selectedFiles removed if it causes issues, rely on functional updates
 
 
   const removeFile = (id: string) => {
     setSelectedFiles(prev => prev.filter(f => f.id !== id));
+    // Preview URL cleanup is handled by the useEffect hook
   };
 
   const handleCompression = useCallback(async () => {
@@ -286,11 +358,29 @@ export const FileCompression = forwardRef<FileCompressionHandle, {}>((props, ref
          const minCompressedSize = Math.min(1024, Math.max(50, selectedFile.originalSize * 0.05));
          const compressedSize = Math.max(minCompressedSize, Math.floor(selectedFile.originalSize * reductionFactor));
 
-         let compressedData = `Simulated compressed data for ${selectedFile.file.name} (Level: ${compressionLevel}). Original size: ${selectedFile.originalSize}, Compressed: ${compressedSize}`;
-         if (selectedFile.source === 'cloud') {
-             compressedData += `\nSource Path: ${selectedFile.sourcePath}`;
-         }
-         const compressedBlob = new Blob([compressedData], { type: 'text/plain' });
+          // Simulate compressed data - IMPORTANT: For preview, maintain image type
+          let compressedBlob: Blob;
+          if (selectedFile.file.type.startsWith('image/')) {
+              // Simulate image data (could be a simple SVG or text placeholder)
+              const svgData = `<svg width="100" height="50" xmlns="http://www.w3.org/2000/svg"><rect width="100%" height="100%" fill="lightgray"/><text x="50%" y="50%" dominant-baseline="middle" text-anchor="middle" font-size="10">Compressed ${selectedFile.file.name}</text></svg>`;
+              compressedBlob = new Blob([svgData], { type: 'image/svg+xml' });
+              // Adjust size to match calculated compressedSize roughly
+              // This is highly approximate for simulation purposes
+              const sizeDiffFactor = compressedSize / (svgData.length * 2); // Approx bytes per char
+              const adjustedSvgData = `<svg width="${100 * Math.sqrt(sizeDiffFactor)}" height="${50 * Math.sqrt(sizeDiffFactor)}" xmlns="http://www.w3.org/2000/svg"><rect width="100%" height="100%" fill="lightgray"/><text x="50%" y="50%" dominant-baseline="middle" text-anchor="middle" font-size="10">Compressed ${selectedFile.file.name}</text></svg>`;
+              compressedBlob = new Blob([adjustedSvgData], { type: 'image/svg+xml' });
+
+
+          } else {
+              // Fallback for non-images
+              let compressedData = `Simulated compressed data for ${selectedFile.file.name} (Level: ${compressionLevel}). Original size: ${selectedFile.originalSize}, Compressed: ${compressedSize}`;
+               if (selectedFile.source === 'cloud') {
+                   compressedData += `\nSource Path: ${selectedFile.sourcePath}`;
+               }
+               compressedBlob = new Blob([compressedData], { type: 'text/plain' });
+          }
+
+
 
           const nameParts = selectedFile.file.name.split('.');
           const extension = nameParts.length > 1 ? `.${nameParts.pop()}` : '';
@@ -309,7 +399,7 @@ export const FileCompression = forwardRef<FileCompressionHandle, {}>((props, ref
               status: 'complete',
               progress: 100,
               compressedSize: compressedSize,
-              compressedBlob: compressedBlob,
+              compressedBlob: compressedBlob, // Store the blob
               compressedFileName: compressedFileName
              } : f)
         );
@@ -462,7 +552,11 @@ export const FileCompression = forwardRef<FileCompressionHandle, {}>((props, ref
                 <h3 className="text-lg font-medium">File Queue:</h3>
                 <ul className="space-y-3 max-h-72 overflow-y-auto pr-2 border rounded-md p-3 bg-background shadow-inner">
                    <AnimatePresence initial={false}>
-                  {selectedFiles.map((item) => (
+                  {selectedFiles.map((item) => {
+                     const previews = previewStates[item.id] || {};
+                     const canPreview = item.file.type.startsWith('image/') && (previews.original || previews.compressed);
+
+                     return (
                      <motion.li
                         key={item.id}
                         variants={listItemVariants}
@@ -535,6 +629,59 @@ export const FileCompression = forwardRef<FileCompressionHandle, {}>((props, ref
                       </div>
 
                        <div className="flex-shrink-0 flex items-center gap-1 pl-2">
+                           {/* Preview Button */}
+                           {canPreview && (
+                               <Dialog>
+                                 <Tooltip>
+                                   <TooltipTrigger asChild>
+                                     <DialogTrigger asChild>
+                                       <Button variant="ghost" size="icon" className="h-7 w-7 text-muted-foreground hover:text-primary hover:bg-primary/10" aria-label="Preview Image">
+                                         <Eye className="h-4 w-4" />
+                                       </Button>
+                                     </DialogTrigger>
+                                   </TooltipTrigger>
+                                   <TooltipContent><p>Preview Image</p></TooltipContent>
+                                 </Tooltip>
+                                 <DialogContent className="max-w-3xl">
+                                     <DialogHeader>
+                                         <DialogTitle>Image Preview: {item.file.name}</DialogTitle>
+                                     </DialogHeader>
+                                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4 items-start">
+                                         {/* Original Preview */}
+                                        {previews.original && (
+                                             <div className="space-y-2">
+                                                <h3 className="text-sm font-medium text-center">Original</h3>
+                                                 <div className="border rounded-md overflow-hidden relative aspect-video bg-muted">
+                                                     <Image src={previews.original} alt="Original Preview" layout="fill" objectFit="contain" />
+                                                 </div>
+                                                <p className="text-xs text-muted-foreground text-center">Size: {formatFileSize(item.originalSize)}</p>
+                                             </div>
+                                         )}
+                                         {/* Compressed Preview */}
+                                         {previews.compressed && item.status === 'complete' && (
+                                             <div className="space-y-2">
+                                                <h3 className="text-sm font-medium text-center">Optimized ({compressionLevel.replace(/_/g, ' ')})</h3>
+                                                 <div className="border rounded-md overflow-hidden relative aspect-video bg-muted">
+                                                     <Image src={previews.compressed} alt="Compressed Preview" layout="fill" objectFit="contain" />
+                                                 </div>
+                                                 <p className="text-xs text-muted-foreground text-center">Size: {formatFileSize(item.compressedSize!)}</p>
+                                             </div>
+                                          )}
+                                          {/* Show placeholder if compressing or not yet compressed */}
+                                          {item.status !== 'complete' && previews.original && (
+                                              <div className="space-y-2 flex flex-col items-center justify-center border rounded-md aspect-video bg-muted/50">
+                                                 <Loader2 className="h-8 w-8 animate-spin text-primary mb-2" />
+                                                 <p className="text-sm text-muted-foreground">Optimized preview pending...</p>
+                                              </div>
+                                          )}
+                                     </div>
+                                      <DialogClose className="absolute right-4 top-4 rounded-sm opacity-70 ring-offset-background transition-opacity hover:opacity-100 focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 disabled:pointer-events-none data-[state=open]:bg-accent data-[state=open]:text-muted-foreground">
+                                        <X className="h-4 w-4" />
+                                        <span className="sr-only">Close</span>
+                                      </DialogClose>
+                                 </DialogContent>
+                               </Dialog>
+                           )}
                          {item.status === 'complete' ? (
                               <Tooltip>
                                   <TooltipTrigger asChild>
@@ -575,7 +722,8 @@ export const FileCompression = forwardRef<FileCompressionHandle, {}>((props, ref
                        </div>
 
                      </motion.li>
-                  ))}
+                   );
+                  })}
                   </AnimatePresence>
                 </ul>
               </div>
