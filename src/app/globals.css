@@ -4,6 +4,8 @@
 
 body {
   font-family: var(--font-geist-sans), Arial, Helvetica, sans-serif;
+  /* Add a very subtle background color for depth */
+  @apply bg-muted/20 dark:bg-background;
 }
 
 @layer base {
@@ -82,7 +84,8 @@ body {
   * {
     @apply border-border;
   }
-  body {
-    @apply bg-background text-foreground;
-  }
+  /* Remove explicit body bg/text here, applied via @apply above */
+  /* body { */
+  /*   @apply bg-background text-foreground; */
+  /* } */
 }

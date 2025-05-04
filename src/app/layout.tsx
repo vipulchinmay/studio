@@ -14,8 +14,8 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: 'FileWise', // Update title
-  description: 'Seamlessly compress your files without data loss.', // Update description
+  title: 'FileWise - Smart File Compression', // Update title
+  description: 'Seamlessly compress your files with AI-powered suggestions and lossless quality.', // Update description
 };
 
 export default function RootLayout({
