@@ -14,8 +14,10 @@ const TooltipTrigger = TooltipPrimitive.Trigger
 const TooltipContent = React.forwardRef<
   React.ElementRef<typeof TooltipPrimitive.Content>,
   React.ComponentPropsWithoutRef<typeof TooltipPrimitive.Content>
->(({ className, sideOffset = 6, align = 'center', ...props }, ref) => ( // Increased sideOffset, default align
-  <TooltipPrimitive.Portal> {/* Ensure Portal is used */}
+>(({ className, sideOffset = 6, align = 'center', ...props }, ref) => { // Increased sideOffset, default align
+  // Ensure Portal is used
+  return (
+  <TooltipPrimitive.Portal>
     <TooltipPrimitive.Content
       ref={ref}
       sideOffset={sideOffset}
@@ -26,8 +28,9 @@ const TooltipContent = React.forwardRef<
       )}
       {...props}
     />
-   </TooltipPrimitive.Portal>
-))
+  </TooltipPrimitive.Portal>
+  )
+})
 TooltipContent.displayName = TooltipPrimitive.Content.displayName
 
 export { Tooltip, TooltipTrigger, TooltipContent, TooltipProvider }
