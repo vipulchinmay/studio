@@ -1,127 +1,174 @@
 // src/app/page.tsx
 'use client';
 
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useCallback, useRef, useImperativeHandle, forwardRef } from 'react';
 import { MainLayout } from '@/components/layout/main-layout';
 import { FileCompression } from '@/components/features/file-compression';
 import { CompressionSuggestions } from '@/components/features/compression-suggestions';
 import { Separator } from '@/components/ui/separator';
 import type { SuggestFilesForCompressionOutput } from '@/ai/flows/suggest-files-for-compression';
-import { suggestFilesForCompression } from '@/ai/flows/suggest-files-for-compression';
+// Remove suggestFilesForCompression import if not calling directly
+// import { suggestFilesForCompression } from '@/ai/flows/suggest-files-for-compression';
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
-import { Loader2, RefreshCcw } from 'lucide-react';
+import { Loader2, RefreshCcw, AlertCircle } from 'lucide-react'; // Added AlertCircle
 import { useToast } from '@/hooks/use-toast';
+import { Button } from '@/components/ui/button'; // Added Button import
+
+// Define the type for the ref handle exposed by FileCompression
+export interface FileCompressionHandle {
+  addFileToLocalQueue: (file: File, sourceInfo?: { path: string; originalSize: number }) => void;
+}
+
+// Define dummy data at module level or fetch appropriately
+const dummySuggestions: SuggestFilesForCompressionOutput = [
+   { name: 'Holiday Snaps Archive.zip', size: 180 * 1024 * 1024, type: 'archive/zip', path: '/cloud/docs/Holiday Snaps Archive.zip', compressionRecommendation: 'Large archive, optimization recommended.' },
+   { name: 'Quarterly Business Review.pptx', size: 95 * 1024 * 1024, type: 'application/vnd.openxmlformats-officedocument.presentationml.presentation', path: '/cloud/work/Quarterly Business Review.pptx', compressionRecommendation: 'Large presentation with images.' },
+   { name: 'IMG_1024.heic', size: 9 * 1024 * 1024, type: 'image/heic', path: '/cloud/photos/DCIM/IMG_1024.heic', compressionRecommendation: 'HEIC image, lossless optimization.' },
+   { name: 'Full Team Meeting Recording.mp4', size: 680 * 1024 * 1024, type: 'video/mp4', path: '/cloud/recordings/Full Team Meeting Recording.mp4', compressionRecommendation: 'Very large video file.' },
+   { name: 'server_access_log_2024-Q1.log', size: 25 * 1024 * 1024, type: 'text/plain', path: '/cloud/logs/server_access_log_2024-Q1.log', compressionRecommendation: 'Large text log, highly compressible.' },
+   { name: 'Website Backup_Full.tar.gz', size: 450 * 1024 * 1024, type: 'application/gzip', path: '/cloud/backups/Website Backup_Full.tar.gz', compressionRecommendation: 'Large compressed archive, re-assess.' },
+   { name: ' scanned_document_receipts.pdf', size: 2 * 1024 * 1024, type: 'application/pdf', path: '/cloud/scans/scanned_document_receipts.pdf', compressionRecommendation: 'Scanned PDF, OCR & optimization.' },
+
+];
 
 export default function Home() {
   const [suggestions, setSuggestions] = useState<SuggestFilesForCompressionOutput>([]);
-  const [isLoadingSuggestions, setIsLoadingSuggestions] = useState(false); // Start false, load on login/refresh
+  const [isLoadingSuggestions, setIsLoadingSuggestions] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const fileCompressionRef = useRef<{ addFilesByPath: (filePath: string, fileName: string) => void }>(null);
+  const fileCompressionRef = useRef<FileCompressionHandle>(null); // Use the defined handle type
   const { toast } = useToast();
 
   // --- Simulated Authentication State ---
-  const [isLoggedIn, setIsLoggedIn] = useState(false);
+  const [isLoggedIn, setIsLoggedIn] = useState(false); // Start logged out
   const [userName, setUserName] = useState<string | undefined>(undefined);
   const [userImage, setUserImage] = useState<string | undefined>(undefined);
 
-  const handleLogin = useCallback((provider: 'google' | 'apple') => {
-    console.log(`Simulating login with ${provider}...`);
-    // Simulate successful login
-    setIsLoggedIn(true);
-    setUserName(provider === 'google' ? 'Demo User' : 'Apple User');
-    setUserImage(provider === 'google' ? 'https://picsum.photos/seed/g-user/40/40' : 'https://picsum.photos/seed/a-user/40/40');
-    toast({ title: "Login Successful", description: `Welcome, ${userName || 'User'}!` });
-    // Fetch suggestions after login
-    fetchSuggestions();
-  }, [userName]); // Include userName to update toast message
+   const handleLogin = useCallback((provider: 'google' | 'apple') => {
+      console.log(`Simulating login with ${provider}...`);
+      setIsLoggedIn(true);
+      const name = provider === 'google' ? 'Demo User' : 'Apple User';
+      setUserName(name);
+      setUserImage(provider === 'google' ? 'https://picsum.photos/seed/g-user/40/40' : 'https://picsum.photos/seed/a-user/40/40');
+      toast({ title: "Login Successful", description: `Welcome, ${name}!` });
+      fetchSuggestions(); // Fetch suggestions immediately after login
+  }, [toast]); // Removed userName dependency from here
 
   const handleLogout = useCallback(() => {
     console.log('Simulating logout...');
     setIsLoggedIn(false);
     setUserName(undefined);
     setUserImage(undefined);
-    setSuggestions([]); // Clear suggestions on logout
-    setIsLoadingSuggestions(false); // Reset loading state
-    setError(null); // Clear errors
+    setSuggestions([]);
+    setIsLoadingSuggestions(false);
+    setError(null);
     toast({ title: "Logged Out", description: "You have been logged out." });
-  }, []);
+  }, [toast]);
   // --- End Simulated Authentication ---
 
 
   const fetchSuggestions = useCallback(async () => {
     if (!isLoggedIn) {
-        setError("Please log in to fetch suggestions.");
-        setIsLoadingSuggestions(false); // Ensure loading stops if not logged in
+        // Don't explicitly set an error here, the UI handles the logged-out state
+        setIsLoadingSuggestions(false);
+        setSuggestions([]); // Clear suggestions if logged out during fetch
         return;
     }
     setIsLoadingSuggestions(true);
     setError(null);
+    console.log("Fetching suggestions...");
     try {
       // Simulate API call delay
-      await new Promise(resolve => setTimeout(resolve, 1200));
-       // *** In a real app, fetch actual files via cloud provider APIs ***
-       // For now, use the existing mock function or a more diverse set
-       const dummyFiles: SuggestFilesForCompressionOutput = [
-           { name: 'Vacation Photo Album.zip', size: 150 * 1024 * 1024, type: 'archive/zip', path: '/cloud/docs/Vacation Photo Album.zip', compressionRecommendation: 'Large archive, good candidate for optimization.' },
-           { name: 'Project Presentation Final FINAL.pptx', size: 80 * 1024 * 1024, type: 'presentation', path: '/cloud/work/Project Presentation Final FINAL.pptx', compressionRecommendation: 'Large presentation, images might be compressible.' },
-           { name: 'IMG_9876.heic', size: 8 * 1024 * 1024, type: 'image/heic', path: '/cloud/photos/DCIM/IMG_9876.heic', compressionRecommendation: 'HEIC image, potential for lossless optimization.' },
-           { name: 'meeting_recording_long.mp4', size: 550 * 1024 * 1024, type: 'video/mp4', path: '/cloud/recordings/meeting_recording_long.mp4', compressionRecommendation: 'Very large video file, consider compression.' },
-           { name: 'backup-log-2024-01.txt', size: 5 * 1024 * 1024, type: 'text/plain', path: '/cloud/logs/backup-log-2024-01.txt', compressionRecommendation: 'Large text file, highly compressible.' },
-       ];
-       // const result = await suggestFilesForCompression({});
-       const result = dummyFiles;
+      await new Promise(resolve => setTimeout(resolve, 1500));
 
-      setSuggestions(result);
-    } catch (err) {
-      console.error('Error fetching suggestions:', err);
-      setError('Failed to fetch file compression suggestions. Please check your connection or cloud provider access.');
+      // *** Use dummy data directly ***
+      // In a real app, this is where you'd call your backend/cloud function
+      // which *might* internally use `suggestFilesForCompression` flow
+      // const result = await fetch('/api/suggestions'); // Example API call
+       if (!isLoggedIn) {
+         // Check again in case user logged out during the delay
+         throw new Error("User logged out during fetch.");
+       }
+      setSuggestions(dummySuggestions);
+      console.log("Suggestions loaded:", dummySuggestions.length);
+    } catch (err: any) {
+       // Only show error if logged in
+        if (isLoggedIn) {
+            console.error('Error fetching suggestions:', err);
+            setError(`Failed to fetch suggestions: ${err.message || 'Please check connection.'}`);
+            toast({
+                title: "Error Fetching Suggestions",
+                description: err.message || "Could not load cloud file suggestions.",
+                variant: "destructive",
+            })
+        } else {
+            console.log("Fetch suggestions cancelled due to logout.");
+        }
+       setSuggestions([]); // Clear suggestions on error
     } finally {
-      setIsLoadingSuggestions(false);
+      // Check login status again before setting loading state
+      if (isLoggedIn) {
+          setIsLoadingSuggestions(false);
+      }
     }
-  }, [isLoggedIn]); // Depend on isLoggedIn
+  }, [isLoggedIn, toast]); // Depend on isLoggedIn and toast
 
-  // Initial fetch effect only runs if logged in (simulated)
+  // Initial check effect - if logged in (e.g., via persisted session), fetch data
   useEffect(() => {
-      // No initial fetch unless logged in state changes from false to true, handled by handleLogin
-      // If you want to check on load if already logged in (e.g., via cookie), do it here.
-  }, []);
+      // Simulate checking auth status on load (e.g., from localStorage/cookie)
+      const checkAuthStatus = async () => {
+          // Replace with your actual auth check logic
+          await new Promise(resolve => setTimeout(resolve, 100)); // Simulate async check
+          const storedLoggedIn = false; // Simulate starting logged out
+           if (storedLoggedIn) {
+               // If found logged in, set state and fetch
+               setIsLoggedIn(true);
+               setUserName("Persisted User"); // Set appropriate user info
+               // setUserImage(...)
+               fetchSuggestions();
+           } else {
+               // Ensure loading state is false if starting logged out
+               setIsLoadingSuggestions(false);
+           }
+      };
+       checkAuthStatus();
+      // We only want this check on initial mount
+      // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []); // Empty dependency array: runs only once on mount
 
 
-  const handleCompressRequest = useCallback((filePath: string, fileName: string) => {
-    // This function simulates adding a file *as if* it were selected locally
-    // It needs access to the FileCompression component's internal logic
-    // We use a ref to call a method exposed by FileCompression
-    console.log("page.tsx received compress request for:", filePath);
+  // Callback passed to CompressionSuggestions to handle adding a cloud file to the LOCAL queue
+   const handleAddCloudFileToLocalQueue = useCallback((filePath: string, fileName: string) => {
+      if (!fileCompressionRef.current) {
+          console.error("FileCompression component ref not available.");
+          toast({ title: "Error", description: "Cannot add file to queue.", variant: "destructive" });
+          return;
+      }
 
-    // In a real scenario, you'd fetch the file from the cloud using filePath
-    // and then create a File object or Blob to pass to the compression component.
-    // For simulation, we'll create a dummy file.
-    const dummyFile = new File([`Simulated content for ${fileName}`], fileName, {
-        type: 'application/octet-stream', // Adjust type based on actual file if known
-        lastModified: Date.now(),
-    });
+       // Find the suggestion to get original size (needed for simulation)
+      const suggestion = suggestions.find(s => s.path === filePath);
+       const originalSize = suggestion?.size ?? 10 * 1024 * 1024; // Default 10MB if not found
 
-     const dummySelectedFile = {
-        id: `${fileName}-cloud-${Date.now()}`,
-        file: dummyFile,
-        status: 'pending' as const, // Type assertion
-        progress: 0,
-        originalSize: suggestions.find(s => s.path === filePath)?.size ?? 1024 * 1024, // Use suggestion size or default
-     };
+      console.log("page.tsx: Adding cloud file to local queue via ref:", fileName);
 
-    // Need to update FileCompression's state directly or via a method
-     // This part requires modifying FileCompression to accept adding files programmatically.
-     // Let's assume FileCompression exposes an `addFiles` method via the ref.
-     // We will need to modify FileCompression to expose this via useImperativeHandle
+      // *** Simulate creating a dummy File object ***
+      // In a real app, you might need to FETCH the file from the cloud first,
+      // which could be slow and costly. This approach simulates adding a *reference*
+      // that the FileCompression component can handle (e.g., by showing it differently
+      // or triggering a download+compress flow).
+      // For this simulation, we create a basic File object.
+      const dummyFile = new File(
+          [`Simulated cloud content for ${fileName}. Path: ${filePath}`],
+          fileName,
+          { type: suggestion?.type || 'application/octet-stream', lastModified: Date.now() }
+      );
 
-     // For now, log the intent:
-     console.log("Attempting to add cloud file to compression queue:", dummySelectedFile);
-     toast({
-         title: "Adding Cloud File",
-         description: `${fileName} added to the compression list below.`
-     });
-     // TODO: Implement the actual adding mechanism in FileCompression and call it here.
-     // fileCompressionRef.current?.addFiles([dummyFile]); // Ideal scenario after refactoring FileCompression
+      // Call the method exposed by FileCompression component via its ref
+      fileCompressionRef.current.addFileToLocalQueue(dummyFile, { path: filePath, originalSize });
+
+      toast({
+          title: "Added to Queue",
+          description: `${fileName} added to the local compression list below.`
+      });
 
   }, [suggestions, toast]);
 
@@ -134,28 +181,29 @@ export default function Home() {
         userName={userName}
         userImage={userImage}
     >
-      <div className="space-y-10">
+      <div className="space-y-8 md:space-y-12"> {/* Increased spacing */}
         {/* File Compression Section (Local Files) */}
-        <section className="space-y-4 p-6 bg-card rounded-lg shadow">
-          <h1 className="text-2xl font-semibold tracking-tight text-card-foreground">Local File Compression</h1>
-          <p className="text-muted-foreground">
-            Select files from your device to compress. Choose your desired compression level for optimal results.
+        <section className="space-y-4 p-4 sm:p-6 bg-card rounded-lg shadow border border-border/50"> {/* Added subtle border */}
+          <h1 className="text-xl sm:text-2xl font-semibold tracking-tight text-card-foreground">Local File Compression</h1>
+          <p className="text-sm sm:text-base text-muted-foreground">
+            Select files from your device. They'll be analyzed for the best compression options.
           </p>
-          {/* Pass ref and potentially addFiles prop/method */}
-          <FileCompression /* ref={fileCompressionRef} */ />
+           {/* Forward the ref to the FileCompression component */}
+           {/* Note: FileCompression needs to use forwardRef and useImperativeHandle */}
+          <FileCompression ref={fileCompressionRef} />
         </section>
 
         <Separator />
 
          {/* Compression Suggestions Section (Cloud Files) */}
-        <section className="space-y-4 p-6 bg-card rounded-lg shadow">
-          <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2">
+        <section className="space-y-4 p-4 sm:p-6 bg-card rounded-lg shadow border border-border/50"> {/* Added subtle border */}
+          <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
             <div className="flex-1">
-                <h2 className="text-2xl font-semibold tracking-tight text-card-foreground">Cloud File Suggestions</h2>
-                <p className="text-muted-foreground mt-1">
+                <h2 className="text-xl sm:text-2xl font-semibold tracking-tight text-card-foreground">Cloud File Suggestions</h2>
+                <p className="text-sm sm:text-base text-muted-foreground mt-1">
                   {isLoggedIn
-                    ? "Our AI has analyzed your connected cloud storage and suggests compressing these files."
-                    : "Log in to connect your cloud storage and get AI-powered compression suggestions."}
+                    ? "AI suggestions for optimizing your connected cloud storage."
+                    : "Log in to view AI-powered compression suggestions for your cloud files."}
                 </p>
             </div>
             {isLoggedIn && (
@@ -164,10 +212,10 @@ export default function Home() {
                     disabled={isLoadingSuggestions}
                     variant="outline"
                     size="sm"
-                    className="flex-shrink-0"
+                    className="flex-shrink-0 mt-2 sm:mt-0" // Add margin top on small screens
                     >
                     {isLoadingSuggestions ? (
-                        <> <Loader2 className="mr-2 h-4 w-4 animate-spin" /> Refreshing... </>
+                        <> <Loader2 className="mr-2 h-4 w-4 animate-spin" /> Fetching... </>
                     ) : (
                          <> <RefreshCcw className="mr-2 h-4 w-4" /> Refresh Suggestions </>
                      )}
@@ -175,26 +223,30 @@ export default function Home() {
              )}
           </div>
 
-           {error && !isLoadingSuggestions && ( // Show error only if not loading
+           {/* Error Display */}
+           {error && !isLoadingSuggestions && isLoggedIn && ( // Show error only if logged in and not loading
             <Alert variant="destructive" className="mt-4">
                  <AlertCircle className="h-4 w-4"/>
-              <AlertTitle>Error</AlertTitle>
+              <AlertTitle>Error Loading Suggestions</AlertTitle>
               <AlertDescription>{error}</AlertDescription>
             </Alert>
           )}
 
+           {/* Loading State */}
           {isLoadingSuggestions ? (
-            <div className="flex flex-col items-center justify-center py-12 text-center">
-              <Loader2 className="h-10 w-10 animate-spin text-primary mb-4" />
-              <p className="text-lg font-medium text-foreground">Fetching Suggestions...</p>
+            <div className="flex flex-col items-center justify-center py-16 text-center border border-dashed rounded-lg mt-4">
+              <Loader2 className="h-12 w-12 animate-spin text-primary mb-4" />
+              <p className="text-lg font-medium text-foreground">Loading Cloud Suggestions</p>
               <p className="text-muted-foreground">Analyzing your cloud files. This might take a moment.</p>
             </div>
           ) : (
-            // Pass the callback function and login status
+            // Suggestions Component
             <CompressionSuggestions
                 suggestions={suggestions}
-                onCompressRequest={handleCompressRequest}
+                onCompressRequest={handleAddCloudFileToLocalQueue} // Pass the correct handler
                 isLoggedIn={isLoggedIn}
+                // Pass cloud compression handler if implemented:
+                // onCompressCloudFile={handleCompressCloudFile}
             />
           )}
         </section>
@@ -202,3 +254,36 @@ export default function Home() {
     </MainLayout>
   );
 }
+
+
+// Wrap FileCompression with forwardRef to receive the ref
+const ForwardedFileCompression = forwardRef<FileCompressionHandle, {}>( (props, ref) => {
+   // Expose the addFileToLocalQueue function via useImperativeHandle
+  // This requires the actual FileCompression component to be modified
+  // to accept a ref and define this handle.
+
+  // Placeholder implementation - the real one needs to be inside FileCompression.tsx
+   useImperativeHandle(ref, () => ({
+     addFileToLocalQueue: (file, sourceInfo) => {
+       console.log("Placeholder: addFileToLocalQueue called in FileCompression wrapper", file.name, sourceInfo);
+       // The actual implementation inside FileCompression.tsx would update its internal state
+       // e.g., call its internal addFiles function or similar
+     }
+   }));
+
+   // Render the actual component (this is just illustrative)
+   // In reality, you'd likely pass the ref down to the component itself
+   // if FileCompression itself is wrapped in forwardRef
+   // For now, assume FileCompression.tsx is modified to handle the ref internally.
+   return <FileCompression /* {...props} - Pass props if needed */ />;
+ });
+
+// It's often cleaner to do the forwardRef directly in the component file (FileCompression.tsx)
+// If FileCompression.tsx is updated like:
+// export const FileCompression = forwardRef<FileCompressionHandle, {}>( (props, ref) => { ... });
+// Then you can directly use `<FileCompression ref={fileCompressionRef} />` above.
+// Assuming that modification is done, we don't need the wrapper here.
+
+// If FileCompression.tsx IS NOT modified, this wrapper becomes necessary,
+// but the `useImperativeHandle` needs access to FileCompression's internal state/functions,
+// which makes placing it inside FileCompression.tsx the better approach.

@@ -11,10 +11,11 @@ import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle }
 import { Upload, File, X, CheckCircle, AlertCircle, Image as ImageIcon, FileAudio, Video, Download, Loader2, BrainCircuit } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useToast } from '@/hooks/use-toast';
-import { analyzeCompressionQuality, AnalyzeCompressionQualityOutput } from '@/ai/flows/analyze-compression-quality';
+import { analyzeCompressionQuality, AnalyzeCompressionQualityOutput, AnalyzeCompressionQualityInput } from '@/ai/flows/analyze-compression-quality';
 import { Badge } from '@/components/ui/badge';
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'; // Import Tooltip components
 
-type CompressionLevel = 'low' | 'medium' | 'high' | 'lossless_optimized'; // Added lossless_optimized
+type CompressionLevel = 'lossless_optimized' | 'high' | 'medium' | 'low'; // Reordered, lossless is default
 type FileStatus = 'pending' | 'uploading' | 'analyzing' | 'compressing' | 'complete' | 'error';
 
 interface SelectedFile {
@@ -24,7 +25,8 @@ interface SelectedFile {
   progress: number;
   originalSize: number;
   compressedSize?: number;
-  compressedDataUrl?: string; // Store compressed data for download
+  compressedBlob?: Blob; // Store compressed Blob for download
+  compressedFileName?: string; // Store the suggested filename for download
   error?: string;
   analysis?: AnalyzeCompressionQualityOutput | null;
 }
@@ -44,7 +46,7 @@ export function FileCompression() {
   };
 
   const formatFileSize = (bytes: number): string => {
-    if (bytes < 0) return 'N/A'; // Handle potential negative size if calculation fails
+    if (bytes < 0 || bytes === undefined || bytes === null) return 'N/A'; // Handle potential invalid size
     if (bytes === 0) return '0 Bytes';
     const k = 1024;
     const sizes = ['Bytes', 'KB', 'MB', 'GB', 'TB'];
@@ -74,54 +76,96 @@ export function FileCompression() {
     }));
 
     setSelectedFiles(prev => [...prev, ...newFiles]);
-    newFiles.forEach(nf => analyzeFile(nf.id, nf.file.name)); // Pass filename for toast
+    newFiles.forEach(nf => analyzeFile(nf.id, nf.file.name, nf.file.size, nf.file.type)); // Pass more info for analysis
   };
 
- const analyzeFile = useCallback(async (fileId: string, fileName: string) => {
+ const analyzeFile = useCallback(async (fileId: string, fileName: string, fileSize: number, fileType: string) => {
     setSelectedFiles(prevFiles =>
       prevFiles.map(f => f.id === fileId ? { ...f, status: 'analyzing', progress: 0 } : f)
     );
 
-    // Simulate getting a file path for the AI flow
-    const filePath = `/${fileName}`; // Placeholder path for AI
+    // Simulate getting a file path for the AI flow - this remains a limitation
+    // without actual file system access or cloud integration.
+    const simulatedFilePath = `/local/${fileName}`;
+
+    const analysisInput: AnalyzeCompressionQualityInput = {
+      filePath: simulatedFilePath // Pass the simulated path
+    };
 
     try {
         // Simulate API call delay for analysis
        await new Promise(resolve => setTimeout(resolve, 800 + Math.random() * 500));
 
-       // *** Use dummy analysis data as file system access is restricted ***
+       // *** Use improved dummy analysis data based on file info ***
        // In a real application, call the actual AI flow:
-       // const analysisResult = await analyzeCompressionQuality({ filePath });
+       // const analysisResult = await analyzeCompressionQuality(analysisInput);
+
+       let shouldCompress = true;
+       let recommendedMethod: AnalyzeCompressionQualityOutput['recommendedMethod'] = 'lossless_optimized';
+       let estimatedReductionPercent: number | undefined = 50; // Default optimistic reduction
+       let qualityImpactDescription = "No quality loss with optimization.";
+
+       // More refined dummy logic based on type and size
+       const lowerCaseType = fileType.toLowerCase();
+       if (lowerCaseType.includes('jpeg') || lowerCaseType.includes('jpg') || lowerCaseType.includes('mp3') || lowerCaseType.includes('aac') || lowerCaseType.includes('mp4') || lowerCaseType.includes('mov') || lowerCaseType.includes('zip') || lowerCaseType.includes('7z')) {
+           // Typically already compressed, but optimization might help
+           estimatedReductionPercent = Math.floor(5 + Math.random() * 20); // 5-25% reduction potential
+           recommendedMethod = 'lossy_high_quality'; // Suggest re-encoding/optimization
+           qualityImpactDescription = "Potential minor reduction via re-optimization.";
+           if (fileSize < 1024 * 100) { // Small already-compressed files
+             shouldCompress = false;
+             recommendedMethod = 'none';
+             estimatedReductionPercent = undefined;
+             qualityImpactDescription = "Likely already efficiently compressed.";
+           }
+       } else if (lowerCaseType.includes('png') || lowerCaseType.includes('gif') || lowerCaseType.includes('tiff') || lowerCaseType.includes('bmp') ) {
+           recommendedMethod = 'lossless_optimized';
+           estimatedReductionPercent = Math.floor(20 + Math.random() * 40); // 20-60% for lossless image types
+           qualityImpactDescription = "Good candidate for lossless optimization.";
+       } else if (lowerCaseType.includes('wav') || lowerCaseType.includes('aiff')) {
+           recommendedMethod = 'lossless_optimized'; // e.g., FLAC
+           estimatedReductionPercent = Math.floor(40 + Math.random() * 30); // 40-70% for lossless audio
+           qualityImpactDescription = "Significant savings via lossless audio codec (e.g., FLAC).";
+       } else if (lowerCaseType.includes('text') || lowerCaseType.includes('csv') || lowerCaseType.includes('log') || lowerCaseType.includes('html') || lowerCaseType.includes('css') || lowerCaseType.includes('js')) {
+           recommendedMethod = 'lossless_optimized'; // e.g., Gzip/Deflate
+           estimatedReductionPercent = Math.floor(60 + Math.random() * 30); // 60-90% for text
+           qualityImpactDescription = "Highly compressible with no quality loss.";
+       } else {
+           // Default for unknown or other types (like PDF, DOCX which can vary)
+           recommendedMethod = 'lossy_balanced';
+           estimatedReductionPercent = Math.floor(30 + Math.random() * 40); // 30-70% general guess
+           qualityImpactDescription = "Compression viable, potential quality trade-off depending on content.";
+       }
 
        const dummyAnalysis: AnalyzeCompressionQualityOutput = {
-            shouldCompress: Math.random() > 0.15, // 85% chance to recommend compression initially
-            compressionRatio: Math.random() * (0.6 - 0.3) + 0.3, // Random ratio between 0.3 (70% reduction) and 0.6 (40% reduction)
-            qualityLossDescription: Math.random() > 0.4 ? "Excellent compression possible with minimal/no quality loss." : "Good compression achievable. Potential for very minor quality differences at high levels."
+            shouldCompress,
+            recommendedMethod,
+            estimatedReductionPercent,
+            qualityImpactDescription
         };
        const analysisResult = dummyAnalysis;
 
       setSelectedFiles(prevFiles =>
         prevFiles.map(f => {
           if (f.id === fileId) {
-            // If analysis says not to compress, still allow lossless
-            const nextStatus = analysisResult.shouldCompress || compressionLevel === 'lossless_optimized' ? 'pending' : 'pending'; // Keep pending to allow user choice
-            return { ...f, status: nextStatus, analysis: analysisResult };
+            return { ...f, status: 'pending', analysis: analysisResult }; // Always go back to pending after analysis
           }
           return f;
         })
       );
         toast({
-            title: `Analysis Complete: ${fileName}`,
+            title: `Analysis: ${fileName}`,
             description: (
-                <>
-                    {analysisResult.shouldCompress
-                        ? `Compression recommended. ${analysisResult.qualityLossDescription || ''}`
-                        : `File type may already be compressed. Lossless optimization still possible. ${analysisResult.qualityLossDescription || ''}`
-                    }
-                    {analysisResult.compressionRatio && ` Est. reduction: ${((1 - analysisResult.compressionRatio) * 100).toFixed(0)}%`}
-                </>
+                <div className="text-sm">
+                    <p>Method: <span className="font-medium">{analysisResult.recommendedMethod.replace(/_/g, ' ')}</span></p>
+                    {analysisResult.estimatedReductionPercent !== undefined && (
+                        <p>Est. Reduction: <span className="font-medium">~{analysisResult.estimatedReductionPercent}%</span></p>
+                    )}
+                    <p>Quality: <span className="italic">{analysisResult.qualityImpactDescription}</span></p>
+                </div>
             ),
-            variant: analysisResult.shouldCompress ? 'default' : 'default', // Use default variant, rely on text
+            variant: analysisResult.shouldCompress ? 'default' : 'default',
+            duration: 5000, // Show analysis toast longer
         });
     } catch (error) {
       console.error('Error analyzing file:', error);
@@ -134,7 +178,7 @@ export function FileCompression() {
         variant: "destructive",
       });
     }
- }, [toast, compressionLevel]); // Add compressionLevel dependency
+ }, [toast]); // Removed compressionLevel dependency
 
 
   const removeFile = (id: string) => {
@@ -159,49 +203,81 @@ export function FileCompression() {
       );
 
       try {
-         // Simulate a more realistic compression time based on level and size
-         const baseTime = 500 + Math.random() * 1000; // Base time 0.5-1.5s
-         const sizeFactor = Math.log10(Math.max(1024, selectedFile.originalSize)) / 3; // Log scale based on size
-         const levelFactor = compressionLevel === 'low' ? 0.8 : compressionLevel === 'medium' ? 1 : compressionLevel === 'high' ? 1.5 : 1.2; // lossless_optimized takes moderate time
+         // Simulate a more realistic compression time
+         const baseTime = 500 + Math.random() * 1000;
+         const sizeFactor = Math.log10(Math.max(1024, selectedFile.originalSize)) / 3;
+         const levelFactor = compressionLevel === 'low' ? 0.7 : compressionLevel === 'medium' ? 1 : compressionLevel === 'high' ? 1.6 : 1.3; // lossless takes moderate time
          const totalTime = baseTime * sizeFactor * levelFactor;
-         const steps = 10;
+         const steps = 15; // More steps for smoother progress
          const stepTime = totalTime / steps;
 
 
         for (let i = 1; i <= steps; i++) {
            await new Promise(resolve => setTimeout(resolve, stepTime));
            setSelectedFiles(prevFiles =>
-             prevFiles.map(f => f.id === selectedFile.id ? { ...f, progress: (i / steps) * 100 } : f)
+             prevFiles.map(f => f.id === selectedFile.id ? { ...f, progress: Math.min(99, (i / steps) * 100) } : f) // Cap at 99 until truly done
            );
          }
 
-         // Simulate enhanced compression result (aiming for ~50% or better reduction)
+         // *** Enhanced Simulation of Compression Result ***
          let reductionFactor;
+         const recommendedMethod = selectedFile.analysis?.recommendedMethod || 'lossless_optimized'; // Use analysis recommendation if available
+         const baseReductionEstimate = (selectedFile.analysis?.estimatedReductionPercent ?? 50) / 100; // Use estimated reduction percent
+
+         // Adjust reduction based on selected level vs. recommended
          if (compressionLevel === 'lossless_optimized') {
-             // Simulate lossless slightly better than 'medium', sometimes close to 'high'
-             reductionFactor = Math.min(0.9, Math.max(0.4, (selectedFile.analysis?.compressionRatio || 0.65) * (0.8 + Math.random() * 0.2)));
+             // Aim for the estimated lossless reduction, or slightly better if estimate was conservative
+             reductionFactor = Math.min(0.9, Math.max(0.1, (1 - baseReductionEstimate) * (0.9 + Math.random() * 0.2))); // 10-90% of original size
+             if (!recommendedMethod.startsWith('lossless')) {
+                 // If user chose lossless but AI recommended lossy, simulate less effective lossless
+                 reductionFactor = Math.min(0.95, Math.max(0.6, reductionFactor * 1.5)); // Less reduction
+             }
          } else {
-              const baseReduction = selectedFile.analysis?.compressionRatio || (compressionLevel === 'low' ? 0.8 : compressionLevel === 'medium' ? 0.6 : 0.45);
-              // Make high compression significantly better, medium slightly better
-              const levelMultiplier = compressionLevel === 'low' ? 1.0 : compressionLevel === 'medium' ? 0.9 : 0.75;
-              reductionFactor = Math.min(0.95, Math.max(0.25, baseReduction * levelMultiplier * (0.9 + Math.random() * 0.2))); // Ensure minimum 5% size, max 75% reduction
+             // Lossy levels
+             const levelEffect = compressionLevel === 'low' ? 1.1 : compressionLevel === 'medium' ? 1.0 : 0.8; // High compression = lower factor (more reduction)
+             reductionFactor = Math.min(0.9, Math.max(0.1, (1 - baseReductionEstimate) * levelEffect * (0.85 + Math.random() * 0.3)));
+
+             if (recommendedMethod.startsWith('lossless') && fileSize > 1024) {
+                 // If user chose lossy for something AI said was good for lossless (like text), simulate HIGH reduction
+                 reductionFactor = Math.min(reductionFactor, 0.3); // Max 70% reduction
+             }
          }
 
-          // Ensure the compressed size is at least a small value (e.g., 1KB) if original is large, or smaller if original is small
-         const minCompressedSize = Math.min(1024, Math.max(10, selectedFile.originalSize * 0.05));
+         // Ensure minimum size and realistic bounds
+         const minCompressedSize = Math.min(1024, Math.max(50, selectedFile.originalSize * 0.05)); // At least 50 bytes or 5%
          const compressedSize = Math.max(minCompressedSize, Math.floor(selectedFile.originalSize * reductionFactor));
 
-         // Simulate creating a downloadable data URL (replace with actual blob/URL later)
-         const compressedDataUrl = `data:application/octet-stream;base64,U2ltdWxhdGVkIENvbXByZXNzZWQgRGF0YSBmb3Ig${selectedFile.file.name}`; // Dummy data
+         // *** Simulate creating a downloadable Blob ***
+         const compressedData = `Simulated compressed data for ${selectedFile.file.name} (Level: ${compressionLevel}). Original size: ${selectedFile.originalSize}, Compressed: ${compressedSize}`;
+         const compressedBlob = new Blob([compressedData], { type: 'text/plain' }); // Simulate as text for simplicity; adjust type if needed
+
+         // Suggest a filename
+          const nameParts = selectedFile.file.name.split('.');
+          const extension = nameParts.length > 1 ? `.${nameParts.pop()}` : '';
+          const baseName = nameParts.join('.');
+          // Add a more descriptive suffix
+          let suffix = '-compressed';
+          if (compressionLevel === 'lossless_optimized') suffix = '-optimized';
+          else if (compressionLevel === 'high') suffix = '-high';
+          else if (compressionLevel === 'medium') suffix = '-med';
+          else if (compressionLevel === 'low') suffix = '-fast';
+         const compressedFileName = `${baseName}${suffix}${extension}`;
 
 
         setSelectedFiles(prevFiles =>
-          prevFiles.map(f => f.id === selectedFile.id ? { ...f, status: 'complete', progress: 100, compressedSize: compressedSize, compressedDataUrl: compressedDataUrl } : f)
+          prevFiles.map(f => f.id === selectedFile.id ? {
+              ...f,
+              status: 'complete',
+              progress: 100, // Final progress
+              compressedSize: compressedSize,
+              compressedBlob: compressedBlob, // Store the blob
+              compressedFileName: compressedFileName // Store the filename
+             } : f)
         );
         toast({
           title: "Compression Complete!",
-          description: `${selectedFile.file.name} compressed successfully.`,
-          variant: 'default', // Use default variant for success
+          description: `${selectedFile.file.name} compressed to ${formatFileSize(compressedSize)}.`,
+          variant: 'default',
         });
 
       } catch (error) {
@@ -218,23 +294,31 @@ export function FileCompression() {
     });
   }, [selectedFiles, compressionLevel, toast]);
 
-  const handleDownload = (file: SelectedFile) => {
-    if (!file.compressedDataUrl || file.status !== 'complete') return;
+   const handleDownload = (file: SelectedFile) => {
+    if (!file.compressedBlob || !file.compressedFileName || file.status !== 'complete') {
+        toast({ title: "Download Error", description: "Compressed file data is not available.", variant: "destructive"});
+        return;
+    }
 
+    // Create a URL for the Blob
+    const url = URL.createObjectURL(file.compressedBlob);
+
+    // Create a temporary link element
     const link = document.createElement('a');
-    link.href = file.compressedDataUrl;
-    // Suggest a filename (e.g., original_name-compressed.ext)
-    const nameParts = file.file.name.split('.');
-    const extension = nameParts.length > 1 ? `.${nameParts.pop()}` : '';
-    const baseName = nameParts.join('.');
-    link.download = `${baseName}-compressed${extension}`;
+    link.href = url;
+    link.download = file.compressedFileName; // Use the stored filename
+
+    // Append to the document, click, and remove
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
 
+    // Revoke the Blob URL to free up memory
+    URL.revokeObjectURL(url);
+
      toast({
         title: "Download Started",
-        description: `Downloading ${link.download}`,
+        description: `Downloading ${file.compressedFileName}`,
      });
   };
 
@@ -248,13 +332,13 @@ export function FileCompression() {
   const handleDragLeave = (event: React.DragEvent<HTMLDivElement>) => {
     event.preventDefault();
     event.stopPropagation();
-    // Only set to false if not dragging over a child element
-    if (event.relatedTarget && !(event.currentTarget as Node).contains(event.relatedTarget as Node)) {
+    // Check relatedTarget to prevent flickering when dragging over child elements
+    const relatedTarget = event.relatedTarget as Node | null;
+    if (!relatedTarget || !event.currentTarget.contains(relatedTarget)) {
         setIsDragging(false);
-    } else if (!event.relatedTarget) {
-        setIsDragging(false); // Handle leaving the window
     }
-  };
+};
+
 
   const handleDrop = (event: React.DragEvent<HTMLDivElement>) => {
     event.preventDefault();
@@ -266,181 +350,239 @@ export function FileCompression() {
     }
   };
 
-  // Calculate overall progress (optional, for a potential overall progress bar)
-  const overallProgress = () => {
-    const compressingFiles = selectedFiles.filter(f => f.status === 'compressing');
-    if (compressingFiles.length === 0) return 0;
-    const totalProgress = compressingFiles.reduce((sum, f) => sum + f.progress, 0);
-    return totalProgress / compressingFiles.length;
+  // Calculate overall progress
+  const calculateOverallProgress = () => {
+    const filesInProgress = selectedFiles.filter(f => f.status === 'compressing' || f.status === 'analyzing');
+    if (filesInProgress.length === 0) return 0;
+
+    const totalProgress = filesInProgress.reduce((sum, f) => {
+      // Weight analysis as less progress than compression if desired, e.g., max 20%
+      const progressValue = f.status === 'analyzing' ? f.progress * 0.2 : f.progress;
+      return sum + progressValue;
+    }, 0);
+
+    return totalProgress / filesInProgress.length;
   };
-  const isCompressingAny = selectedFiles.some(f => f.status === 'compressing');
+  const isProcessingAny = selectedFiles.some(f => f.status === 'compressing' || f.status === 'analyzing');
+  const overallProgressValue = calculateOverallProgress();
 
 
   return (
-    <Card
-      className={cn("transition-all duration-300 border-dashed border-2", isDragging ? 'border-primary ring-2 ring-primary/50 shadow-lg' : 'border-muted hover:border-border')}
-      onDragOver={handleDragOver}
-      onDragLeave={handleDragLeave}
-      onDrop={handleDrop}
-    >
-      <CardHeader>
-        <CardTitle className="flex items-center gap-2">
-            <Upload className="h-6 w-6" /> Upload and Compress
-        </CardTitle>
-        <CardDescription>Drag & drop files or click to select. Choose your preferred compression method.</CardDescription>
-      </CardHeader>
-      <CardContent className="space-y-6">
-        <div
-            className={cn("flex flex-col items-center justify-center p-10 border-2 border-dashed rounded-lg cursor-pointer transition-colors duration-200",
-                isDragging ? "border-primary bg-primary/10" : "border-border hover:border-primary/50 hover:bg-muted/50"
-            )}
-            onClick={() => fileInputRef.current?.click()}
-            role="button"
-            aria-label="File upload area"
+    // Wrap with TooltipProvider
+    <TooltipProvider delayDuration={100}>
+        <Card
+          className={cn("transition-all duration-300 border-dashed border-2 relative overflow-hidden", // Added relative and overflow-hidden
+            isDragging ? 'border-primary ring-2 ring-primary/50 shadow-lg' : 'border-muted hover:border-border'
+          )}
+          onDragOver={handleDragOver}
+          onDragLeave={handleDragLeave}
+          onDrop={handleDrop}
         >
-          <Upload className={cn("h-12 w-12 mb-4 transition-colors", isDragging ? "text-primary" : "text-muted-foreground")} />
-          <p className={cn("text-center transition-colors", isDragging ? "text-primary font-medium" : "text-muted-foreground")}>
-             {isDragging ? 'Drop files to upload' : 'Drag & drop files here, or click to select'}
-           </p>
-          <Input
-            ref={fileInputRef}
-            id="file-upload-input"
-            type="file"
-            className="hidden"
-            onChange={handleFileChange}
-            multiple
-            accept="image/*,audio/*,video/*,application/pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt,.zip,.rar,.7z,.csv" // Expanded accepted types
-          />
-           <Label htmlFor="file-upload-input" className="sr-only">Upload files</Label>
-        </div>
+        {/* Add a visual overlay for drag state */}
+         {isDragging && (
+            <div className="absolute inset-0 bg-primary/10 z-10 flex items-center justify-center pointer-events-none">
+                 <Upload className="h-16 w-16 text-primary animate-bounce" />
+             </div>
+          )}
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+                <Upload className="h-6 w-6" /> Upload and Compress
+            </CardTitle>
+            <CardDescription>Drag & drop files or click to select. AI analysis provides insights before compression.</CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-6">
+            <div
+                className={cn("flex flex-col items-center justify-center p-10 border-2 border-dashed rounded-lg cursor-pointer transition-colors duration-200 relative z-0", // Ensure content is below overlay
+                    isDragging ? "border-primary bg-transparent" : "border-border hover:border-primary/50 hover:bg-muted/50"
+                )}
+                onClick={() => fileInputRef.current?.click()}
+                role="button"
+                aria-label="File upload area"
+            >
+              <Upload className={cn("h-12 w-12 mb-4 transition-colors", isDragging ? "text-primary" : "text-muted-foreground")} />
+              <p className={cn("text-center transition-colors", isDragging ? "text-primary font-medium" : "text-muted-foreground")}>
+                 {isDragging ? 'Drop files to upload' : 'Drag & drop files here, or click to select'}
+               </p>
+              <Input
+                ref={fileInputRef}
+                id="file-upload-input"
+                type="file"
+                className="hidden"
+                onChange={handleFileChange}
+                multiple
+                accept="image/*,audio/*,video/*,application/pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt,.zip,.rar,.7z,.csv,.json,.xml,.html,.css,.js,.ts,.py,.java,.c,.cpp,.h,.hpp,.md,.log" // Even more expanded types
+              />
+               <Label htmlFor="file-upload-input" className="sr-only">Upload files</Label>
+            </div>
 
-        {selectedFiles.length > 0 && (
-          <div className="space-y-4">
-            <h3 className="text-lg font-medium">Selected Files:</h3>
-            <ul className="space-y-3 max-h-72 overflow-y-auto pr-2 border rounded-md p-3 bg-background shadow-inner">
-              {selectedFiles.map((item) => (
-                <li key={item.id} className="flex items-center space-x-3 p-3 bg-muted/50 rounded-md shadow-sm hover:bg-muted transition-colors duration-150">
-                  <div className="flex-shrink-0">{getFileIcon(item.file.type)}</div>
-                  <div className="flex-1 min-w-0 space-y-1">
-                    <p className="text-sm font-medium text-foreground truncate" title={item.file.name}>{item.file.name}</p>
-                    <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                        <span>{formatFileSize(item.originalSize)}</span>
-                       {item.status === 'complete' && item.compressedSize !== undefined && (
-                           <>
-                             <span className="text-muted-foreground">&rarr;</span>
-                             <span className="text-green-600 dark:text-green-500 font-medium">{formatFileSize(item.compressedSize)}</span>
-                             <Badge variant="outline" className="text-green-600 dark:text-green-500 border-green-500/50 px-1.5 py-0.5 text-[10px] leading-none">
-                                Saved {formatFileSize(item.originalSize - item.compressedSize)} ({( (1 - item.compressedSize / item.originalSize) * 100).toFixed(1)}%)
-                            </Badge>
-                           </>
-                        )}
-                    </div>
-                     {item.status === 'compressing' && (
-                       <Progress value={item.progress} className="h-1.5 mt-1" aria-label={`Compressing ${item.file.name}`} />
-                     )}
-                      {item.status === 'analyzing' && (
-                        <div className="flex items-center gap-1 text-xs text-muted-foreground mt-1 italic">
-                            <Loader2 className="h-3 w-3 animate-spin" /> Analyzing suitability...
+            {selectedFiles.length > 0 && (
+              <div className="space-y-4">
+                <h3 className="text-lg font-medium">Selected Files:</h3>
+                <ul className="space-y-3 max-h-72 overflow-y-auto pr-2 border rounded-md p-3 bg-background shadow-inner">
+                  {selectedFiles.map((item) => (
+                    <li key={item.id} className="flex items-center space-x-3 p-3 bg-muted/50 rounded-md shadow-sm hover:bg-muted transition-colors duration-150">
+                      <div className="flex-shrink-0">{getFileIcon(item.file.type)}</div>
+                      <div className="flex-1 min-w-0 space-y-1">
+                        <p className="text-sm font-medium text-foreground truncate" title={item.file.name}>{item.file.name}</p>
+                        <div className="flex items-center flex-wrap gap-x-2 gap-y-1 text-xs text-muted-foreground">
+                            <span>{formatFileSize(item.originalSize)}</span>
+                           {item.status === 'complete' && item.compressedSize !== undefined && (
+                               <>
+                                 <span className="text-muted-foreground">&rarr;</span>
+                                 <span className="text-green-600 dark:text-green-500 font-medium">{formatFileSize(item.compressedSize)}</span>
+                                 <Badge variant="outline" className="text-green-600 dark:text-green-500 border-green-500/50 px-1.5 py-0.5 text-[10px] leading-none font-normal whitespace-nowrap">
+                                    Saved {formatFileSize(item.originalSize - item.compressedSize)} ({( (1 - item.compressedSize / item.originalSize) * 100).toFixed(1)}%)
+                                </Badge>
+                               </>
+                            )}
+                             {item.status === 'error' && <Badge variant="destructive" className="whitespace-nowrap font-normal"><AlertCircle className="h-3 w-3 mr-1"/>{item.error}</Badge>}
                         </div>
-                    )}
-                     {item.status === 'error' && <p className="text-xs text-destructive mt-1 font-medium flex items-center gap-1"><AlertCircle className="h-3 w-3"/>{item.error}</p>}
-                     {item.status === 'pending' && item.analysis && (
-                         <p className={cn("text-xs mt-1 flex items-center gap-1",
-                                          item.analysis.shouldCompress ? "text-green-600 dark:text-green-500" : "text-orange-600 dark:text-orange-500")}>
-                             <BrainCircuit className="h-3 w-3" />
-                             {item.analysis.shouldCompress
-                                 ? `AI: ${item.analysis.qualityLossDescription || 'Good candidate.'}`
-                                 : `AI: ${item.analysis.qualityLossDescription || 'May not compress well.'}`
-                             }
-                             {item.analysis.compressionRatio && ` (Est. ~${((1 - item.analysis.compressionRatio) * 100).toFixed(0)}% reduction)`}
-                         </p>
-                     )}
-                  </div>
+                         {item.status === 'compressing' && (
+                           <Progress value={item.progress} className="h-1.5 mt-1" aria-label={`Compressing ${item.file.name}`} />
+                         )}
+                          {item.status === 'analyzing' && (
+                            <div className="flex items-center gap-1 text-xs text-muted-foreground mt-1 italic">
+                                <Loader2 className="h-3 w-3 animate-spin" /> Analyzing suitability...
+                            </div>
+                        )}
+                         {item.status === 'pending' && item.analysis && (
+                            // Use Tooltip for detailed analysis info
+                             <Tooltip>
+                                <TooltipTrigger asChild>
+                                     <Badge
+                                         variant={item.analysis.recommendedMethod === 'none' ? 'secondary' : item.analysis.shouldCompress ? 'default' : 'outline'}
+                                         className={cn("cursor-help mt-1 font-normal",
+                                             !item.analysis.shouldCompress && item.analysis.recommendedMethod !== 'none' && "text-orange-600 dark:text-orange-500 border-orange-500/50",
+                                             item.analysis.shouldCompress && "text-green-600 dark:text-green-500 border-green-500/50",
+                                              item.analysis.recommendedMethod === 'none' && "opacity-80"
+                                         )}
+                                     >
+                                         <BrainCircuit className="h-3 w-3 mr-1" />
+                                        AI: {item.analysis.recommendedMethod.replace(/_/g, ' ')}
+                                         {item.analysis.estimatedReductionPercent !== undefined ? ` (~${item.analysis.estimatedReductionPercent}%)` : ''}
+                                     </Badge>
+                                </TooltipTrigger>
+                                 <TooltipContent side="bottom" align="start">
+                                    <p className="text-sm max-w-xs">{item.analysis.qualityImpactDescription}</p>
+                                </TooltipContent>
+                             </Tooltip>
+                         )}
+                      </div>
 
-                   {/* Action Buttons */}
-                   <div className="flex-shrink-0 flex items-center gap-2">
-                     {item.status === 'complete' ? (
-                         <Button variant="outline" size="sm" onClick={() => handleDownload(item)} className="h-8 w-8 p-0" title={`Download ${item.file.name}`}>
-                           <Download className="h-4 w-4" />
-                         </Button>
-                       ) : item.status === 'error' ? (
-                           <AlertCircle className="h-5 w-5 text-destructive" title={`Error: ${item.error}`} />
-                       ) : item.status === 'compressing' || item.status === 'analyzing' ? (
-                            <Loader2 className="h-5 w-5 animate-spin text-primary" />
-                       ) : null /* Placeholder for pending/other states */}
+                       {/* Action Buttons */}
+                       <div className="flex-shrink-0 flex items-center gap-1">
+                         {item.status === 'complete' ? (
+                              <Tooltip>
+                                  <TooltipTrigger asChild>
+                                     <Button variant="outline" size="icon" onClick={() => handleDownload(item)} className="h-8 w-8 text-primary hover:text-primary" aria-label={`Download ${item.compressedFileName}`}>
+                                       <Download className="h-4 w-4" />
+                                     </Button>
+                                 </TooltipTrigger>
+                                 <TooltipContent><p>Download Compressed File</p></TooltipContent>
+                             </Tooltip>
+                           ) : item.status === 'error' ? (
+                              <Tooltip>
+                                  <TooltipTrigger asChild>
+                                      {/* Make error icon clickable to retry analysis/compression? */}
+                                      <span className="text-destructive p-1.5 rounded-full hover:bg-destructive/10 cursor-help">
+                                          <AlertCircle className="h-5 w-5" />
+                                      </span>
+                                  </TooltipTrigger>
+                                  <TooltipContent><p>Error: {item.error}</p></TooltipContent>
+                              </Tooltip>
+                           ) : item.status === 'compressing' || item.status === 'analyzing' ? (
+                                <Tooltip>
+                                    <TooltipTrigger>
+                                        <Loader2 className="h-5 w-5 animate-spin text-primary" />
+                                    </TooltipTrigger>
+                                     <TooltipContent><p>{item.status === 'compressing' ? 'Compressing...' : 'Analyzing...'}</p></TooltipContent>
+                                </Tooltip>
+                           ) : null /* Placeholder for pending */}
 
-                      {/* Remove Button - always show unless compressing/analyzing */}
-                      {item.status !== 'compressing' && item.status !== 'analyzing' && (
-                         <Button variant="ghost" size="icon" className="h-7 w-7 text-muted-foreground hover:text-destructive hover:bg-destructive/10" onClick={() => removeFile(item.id)} title="Remove file">
-                             <X className="h-4 w-4" />
-                         </Button>
-                     )}
-                   </div>
+                          {/* Remove Button - always show unless processing */}
+                          {item.status !== 'compressing' && item.status !== 'analyzing' && (
+                             <Tooltip>
+                                 <TooltipTrigger asChild>
+                                     <Button variant="ghost" size="icon" className="h-7 w-7 text-muted-foreground hover:text-destructive hover:bg-destructive/10" onClick={() => removeFile(item.id)} aria-label="Remove file">
+                                         <X className="h-4 w-4" />
+                                     </Button>
+                                 </TooltipTrigger>
+                                 <TooltipContent><p>Remove File</p></TooltipContent>
+                             </Tooltip>
+                         )}
+                       </div>
 
-                </li>
-              ))}
-            </ul>
-          </div>
-        )}
-
-        <div className="space-y-3">
-          <Label className="text-base font-medium">Compression Method</Label>
-          <RadioGroup
-            value={compressionLevel}
-            onValueChange={(value: string) => setCompressionLevel(value as CompressionLevel)}
-            className="grid grid-cols-1 md:grid-cols-2 gap-3"
-            aria-label="Compression level selection"
-          >
-            {/* Updated Options */}
-            <Label htmlFor="lossless_optimized" className="flex items-center space-x-3 p-4 border rounded-md hover:border-primary transition-colors cursor-pointer [&:has([data-state=checked])]:border-primary [&:has([data-state=checked])]:ring-1 [&:has([data-state=checked])]:ring-primary">
-              <RadioGroupItem value="lossless_optimized" id="lossless_optimized" />
-              <div className="flex-1">
-                <span className="font-medium">Lossless Optimized (Recommended)</span>
-                <p className="text-xs text-muted-foreground">Best quality, significant size reduction via smart optimization.</p>
+                    </li>
+                  ))}
+                </ul>
               </div>
-            </Label>
-             <Label htmlFor="high" className="flex items-center space-x-3 p-4 border rounded-md hover:border-primary transition-colors cursor-pointer [&:has([data-state=checked])]:border-primary [&:has([data-state=checked])]:ring-1 [&:has([data-state=checked])]:ring-primary">
-               <RadioGroupItem value="high" id="high" />
-                <div className="flex-1">
-                  <span className="font-medium">High Compression</span>
-                  <p className="text-xs text-muted-foreground">Maximum size reduction, minimal quality loss possible.</p>
-               </div>
-             </Label>
-             <Label htmlFor="medium" className="flex items-center space-x-3 p-4 border rounded-md hover:border-primary transition-colors cursor-pointer [&:has([data-state=checked])]:border-primary [&:has([data-state=checked])]:ring-1 [&:has([data-state=checked])]:ring-primary">
-               <RadioGroupItem value="medium" id="medium" />
-                <div className="flex-1">
-                 <span className="font-medium">Balanced</span>
-                 <p className="text-xs text-muted-foreground">Good balance between size and speed.</p>
-               </div>
-             </Label>
-              <Label htmlFor="low" className="flex items-center space-x-3 p-4 border rounded-md hover:border-primary transition-colors cursor-pointer [&:has([data-state=checked])]:border-primary [&:has([data-state=checked])]:ring-1 [&:has([data-state=checked])]:ring-primary">
-                <RadioGroupItem value="low" id="low" />
-                <div className="flex-1">
-                  <span className="font-medium">Fastest</span>
-                  <p className="text-xs text-muted-foreground">Quick compression, less size reduction.</p>
-                </div>
-             </Label>
-          </RadioGroup>
-        </div>
-      </CardContent>
-      <CardFooter className="flex flex-col items-stretch gap-3 pt-4 border-t">
-        {isCompressingAny && <Progress value={overallProgress()} className="h-2" aria-label="Overall compression progress"/>}
-        <Button
-            size="lg"
-            onClick={handleCompression}
-            disabled={isCompressingAny || selectedFiles.every(f => f.status !== 'pending' && f.status !== 'error') || selectedFiles.length === 0}
-            className="w-full transition-all duration-300 ease-in-out transform hover:scale-[1.02]"
-            aria-live="polite"
-        >
-            {isCompressingAny ? (
-                <>
-                    <Loader2 className="mr-2 h-5 w-5 animate-spin" /> Compressing...
-                </>
-             ) : (
-                 `Start Compression (${selectedFiles.filter(f => f.status === 'pending' || f.status === 'error').length} files)`
-             )}
-        </Button>
-      </CardFooter>
-    </Card>
+            )}
+
+            <div className="space-y-3">
+              <Label className="text-base font-medium">Compression Method</Label>
+              <RadioGroup
+                value={compressionLevel}
+                onValueChange={(value: string) => setCompressionLevel(value as CompressionLevel)}
+                className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3" // Responsive grid
+                aria-label="Compression level selection"
+              >
+                {/* Lossless Option */}
+                 <Label htmlFor="lossless_optimized" className={cn("flex flex-col items-start space-y-1 p-4 border rounded-md transition-colors cursor-pointer hover:border-primary has-[:checked]:border-primary has-[:checked]:ring-1 has-[:checked]:ring-primary", compressionLevel === 'lossless_optimized' && "bg-primary/5 border-primary")}>
+                    <div className="flex items-center justify-between w-full">
+                        <span className="font-medium">Lossless</span>
+                         <RadioGroupItem value="lossless_optimized" id="lossless_optimized" className="mt-0" /> {/* Moved radio item */}
+                    </div>
+                    <p className="text-xs text-muted-foreground">Best quality via smart optimization. Ideal for text, code, PNGs.</p>
+                     <Badge variant="outline" className="text-green-600 border-green-500/50 text-[10px] mt-1">Recommended</Badge>
+                </Label>
+                {/* High Option */}
+                 <Label htmlFor="high" className={cn("flex flex-col items-start space-y-1 p-4 border rounded-md transition-colors cursor-pointer hover:border-primary has-[:checked]:border-primary has-[:checked]:ring-1 has-[:checked]:ring-primary", compressionLevel === 'high' && "bg-primary/5 border-primary")}>
+                     <div className="flex items-center justify-between w-full">
+                        <span className="font-medium">High Compression</span>
+                         <RadioGroupItem value="high" id="high" className="mt-0" />
+                     </div>
+                    <p className="text-xs text-muted-foreground">Max size reduction, slight quality loss possible. Good for images/video.</p>
+                 </Label>
+                 {/* Medium Option */}
+                 <Label htmlFor="medium" className={cn("flex flex-col items-start space-y-1 p-4 border rounded-md transition-colors cursor-pointer hover:border-primary has-[:checked]:border-primary has-[:checked]:ring-1 has-[:checked]:ring-primary", compressionLevel === 'medium' && "bg-primary/5 border-primary")}>
+                     <div className="flex items-center justify-between w-full">
+                         <span className="font-medium">Balanced</span>
+                          <RadioGroupItem value="medium" id="medium" className="mt-0" />
+                     </div>
+                    <p className="text-xs text-muted-foreground">Good balance between size reduction and quality/speed.</p>
+                 </Label>
+                 {/* Low Option */}
+                  <Label htmlFor="low" className={cn("flex flex-col items-start space-y-1 p-4 border rounded-md transition-colors cursor-pointer hover:border-primary has-[:checked]:border-primary has-[:checked]:ring-1 has-[:checked]:ring-primary", compressionLevel === 'low' && "bg-primary/5 border-primary")}>
+                     <div className="flex items-center justify-between w-full">
+                         <span className="font-medium">Fastest</span>
+                         <RadioGroupItem value="low" id="low" className="mt-0" />
+                     </div>
+                    <p className="text-xs text-muted-foreground">Quickest compression, less size reduction. Minimal quality impact.</p>
+                 </Label>
+              </RadioGroup>
+            </div>
+          </CardContent>
+          <CardFooter className="flex flex-col items-stretch gap-3 pt-4 border-t">
+            {isProcessingAny && <Progress value={overallProgressValue} className="h-2" aria-label="Overall processing progress"/>}
+            <Button
+                size="lg"
+                onClick={handleCompression}
+                disabled={isProcessingAny || selectedFiles.every(f => f.status !== 'pending' && f.status !== 'error') || selectedFiles.length === 0}
+                className="w-full transition-all duration-300 ease-in-out transform hover:scale-[1.02] disabled:hover:scale-100"
+                aria-live="polite"
+            >
+                {isProcessingAny ? (
+                    <>
+                        <Loader2 className="mr-2 h-5 w-5 animate-spin" />
+                        {selectedFiles.some(f => f.status === 'compressing') ? 'Compressing...' : 'Analyzing...'}
+                         ({selectedFiles.filter(f => f.status === 'compressing' || f.status === 'analyzing').length} files)
+                    </>
+                 ) : (
+                     `Start Compression (${selectedFiles.filter(f => f.status === 'pending' || f.status === 'error').length} files)`
+                 )}
+            </Button>
+          </CardFooter>
+        </Card>
+    </TooltipProvider> // Close TooltipProvider
   );
 }
