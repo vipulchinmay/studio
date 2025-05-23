@@ -366,47 +366,43 @@ export const FileCompression = forwardRef<FileCompressionHandle, {}>((props, ref
          const minCompressedSize = Math.min(1024, Math.max(50, selectedFile.originalSize * 0.05));
          const compressedSize = Math.max(minCompressedSize, Math.floor(selectedFile.originalSize * reductionFactor));
 
-          // Simulate compressed data - IMPORTANT: For preview, maintain image type
           let compressedBlob: Blob;
-          let compressedType = selectedFile.file.type; // Default to original type
+          let compressedType = selectedFile.file.type;
 
           if (selectedFile.file.type.startsWith('image/')) {
-              // Simulate image data (could be a simple SVG or text placeholder)
               const svgData = `<svg width="100" height="50" xmlns="http://www.w3.org/2000/svg"><rect width="100%" height="100%" fill="lightgray"/><text x="50%" y="50%" dominant-baseline="middle" text-anchor="middle" font-size="10">Compressed ${selectedFile.file.name}</text></svg>`;
-              compressedBlob = new Blob([svgData], { type: 'image/svg+xml' });
-              compressedType = 'image/svg+xml'; // Update type for SVG simulation
-              // Adjust size to match calculated compressedSize roughly
-              // This is highly approximate for simulation purposes
-              const sizeDiffFactor = compressedSize / (svgData.length * 2); // Approx bytes per char
-              const adjustedSvgData = `<svg width="${100 * Math.sqrt(sizeDiffFactor)}" height="${50 * Math.sqrt(sizeDiffFactor)}" xmlns="http://www.w3.org/2000/svg"><rect width="100%" height="100%" fill="lightgray"/><text x="50%" y="50%" dominant-baseline="middle" text-anchor="middle" font-size="10">Compressed ${selectedFile.file.name}</text></svg>`;
+              // Approximate size adjustment for SVG simulation
+              const sizeDiffFactor = Math.max(0.1, compressedSize / (svgData.length * 2)); // Avoid zero or negative
+              const adjustedSvgData = `<svg width="${Math.max(10, 100 * Math.sqrt(sizeDiffFactor))}" height="${Math.max(5, 50 * Math.sqrt(sizeDiffFactor))}" xmlns="http://www.w3.org/2000/svg"><rect width="100%" height="100%" fill="lightgray"/><text x="50%" y="50%" dominant-baseline="middle" text-anchor="middle" font-size="10">Compressed ${selectedFile.file.name}</text></svg>`;
               compressedBlob = new Blob([adjustedSvgData], { type: 'image/svg+xml' });
-
-
+              compressedType = 'image/svg+xml';
           } else {
-              // Fallback for non-images
               let compressedData = `Simulated compressed data for ${selectedFile.file.name} (Level: ${compressionLevel}). Original size: ${selectedFile.originalSize}, Compressed: ${compressedSize}`;
                if (selectedFile.source === 'cloud') {
                    compressedData += `\nSource Path: ${selectedFile.sourcePath}`;
                }
                compressedBlob = new Blob([compressedData], { type: 'text/plain' });
-               compressedType = 'text/plain'; // Update type for text simulation
+               compressedType = 'text/plain';
           }
 
+          const originalNameParts = selectedFile.file.name.split('.');
+          const originalBaseName = originalNameParts.length > 1 ? originalNameParts.slice(0, -1).join('.') : selectedFile.file.name;
 
-          // Update compressedBlob with the correct type
-          compressedBlob = new Blob([compressedBlob], { type: compressedType });
+          let newExtension = '.bin'; // Default backup extension
+          if (compressedType === 'image/svg+xml') {
+            newExtension = '.svg';
+          } else if (compressedType === 'text/plain') {
+            newExtension = '.txt';
+          }
+          // Add more mappings if other simulated types are introduced
 
-
-          const nameParts = selectedFile.file.name.split('.');
-          const extension = nameParts.length > 1 ? `.${nameParts.pop()}` : '';
-          const baseName = nameParts.join('.');
           let suffix = '-compressed';
           if (compressionLevel === 'lossless_optimized') suffix = '-optimized';
           else if (compressionLevel === 'high') suffix = '-high';
           else if (compressionLevel === 'medium') suffix = '-med';
           else if (compressionLevel === 'low') suffix = '-fast';
-         const compressedFileName = `${baseName}${suffix}${extension}`;
 
+          const compressedFileName = `${originalBaseName}${suffix}${newExtension}`;
 
         setSelectedFiles(prevFiles =>
           prevFiles.map(f => f.id === selectedFile.id ? {
@@ -414,7 +410,7 @@ export const FileCompression = forwardRef<FileCompressionHandle, {}>((props, ref
               status: 'complete',
               progress: 100,
               compressedSize: compressedSize,
-              compressedBlob: compressedBlob, // Store the blob
+              compressedBlob: compressedBlob,
               compressedFileName: compressedFileName
              } : f)
         );
